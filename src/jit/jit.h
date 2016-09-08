@@ -468,6 +468,7 @@ typedef ptrdiff_t ssize_t;
 
 #define VERBOSE_SIZES 0  // Always display GC info sizes. If set, DISPLAY_SIZES must also be set.
 #define VERBOSE_VERIFY 0 // Dump additional information when verifying code. Useful to debug verification bugs.
+#define JITSTAT_HSEOK 1
 
 #ifdef DEBUG
 #define MEASURE_MEM_ALLOC 1 // Collect memory allocation stats.

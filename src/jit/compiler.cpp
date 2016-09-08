@@ -237,6 +237,15 @@ Histogram genTreeNsizHist(HostAllocator::getHostAllocator(), genTreeNsizHistBuck
  *  Variables to keep track of total code amounts.
  */
 
+#if JITSTAT_HSEOK
+size_t myCompiledILSizeTotal;         // compiled IL code size: include inlining
+size_t myCompiledILPureSizeTotal;     // compiled IL code size: exclude inlining
+size_t myCompiledILInlinedSize;       // temporary IL size: inlined code size
+size_t myCompiledMethods;             // no. of compiled methods
+size_t myInlinedMethods;              // no. of inlined methods
+size_t myNoInlinableMethods;          // no. of methods never doing inlining
+#endif
+
 #if DISPLAY_SIZES
 
 size_t grossVMsize; // Total IL code size
@@ -1126,6 +1135,11 @@ void Compiler::compStartup()
 #if DISPLAY_SIZES
     grossVMsize = grossNCsize = totalNCsize = 0;
 #endif // DISPLAY_SIZES
+
+#if JITSTAT_HSEOK
+    myCompiledILSizeTotal = myCompiledILPureSizeTotal = myCompiledILInlinedSize = 0;
+    myCompiledMethods = myInlinedMethods = myNoInlinableMethods = 0;
+#endif
 
     // Initialize the JIT's allocator.
     ArenaAllocator::startup();
@@ -4572,6 +4586,13 @@ void Compiler::compCompile(void** methodCodePtr, ULONG* methodCodeSize, CORJIT_F
 /*****************************************************************************/
 void Compiler::ProcessShutdownWork(ICorStaticInfo* statInfo)
 {
+#if JITSTAT_HSEOK
+    printf("Compiled IL Code Size(Include Inlining): %u bytes\n", myCompiledILSizeTotal);
+    printf("Compiled IL Code Size(Exclude Inlining): %u bytes\n", myCompiledILPureSizeTotal);
+    printf("Compiled Methods: %u\n", myCompiledMethods);
+    printf("Inlined Methods: %u\n", myInlinedMethods);
+    printf("Inlinable Methods: %u\n", myCompiledMethods - myNoInlinableMethods);
+#endif
 }
 
 #ifdef _TARGET_AMD64_
@@ -4990,6 +5011,15 @@ void Compiler::compCompileFinish()
 {
 #if defined(DEBUG) || MEASURE_NODE_SIZE || MEASURE_BLOCK_SIZE || DISPLAY_SIZES || CALL_ARG_STATS
     genMethodCnt++;
+#endif
+
+#if JITSTAT_HSEOK
+    myCompiledILSizeTotal += (info.compILCodeSize + myCompiledILInlinedSize);
+    myCompiledILPureSizeTotal += info.compILCodeSize;
+    myCompiledMethods++;
+    if (myCompiledILInlinedSize == 0) myNoInlinableMethods++;
+    
+    myCompiledILInlinedSize = 0;
 #endif
 
 #if MEASURE_MEM_ALLOC

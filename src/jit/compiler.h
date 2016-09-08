@@ -8974,6 +8974,15 @@ const unsigned TYPE_REF_TYPEMASK = 0x7F; // bits that represent the type
  *  Variables to keep track of total code amounts.
  */
 
+#if JITSTAT_HSEOK
+extern size_t myCompiledILSizeTotal;         // compiled IL code size: include inlining
+extern size_t myCompiledILPureSizeTotal;     // compiled IL code size: exclude inlining
+extern size_t myCompiledILInlinedSize;       // temporary IL size: inlined code size
+extern size_t myCompiledMethods;             // no. of compiled methods
+extern size_t myInlinedMethods;              // no. of inlined methods
+extern size_t myNoInlinableMethods;          // no. of methods never doing inlining
+#endif
+
 #if DISPLAY_SIZES
 
 extern size_t grossVMsize;

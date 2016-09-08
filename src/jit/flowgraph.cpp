@@ -21562,6 +21562,11 @@ void       Compiler::fgInvokeInlineeCompiler(GenTreeCall*  call,
     impInlinedCodeSize += inlineCandidateInfo->methInfo.ILCodeSize;
 #endif
 
+#if JITSTAT_HSEOK
+    myCompiledILInlinedSize += inlineCandidateInfo->methInfo.ILCodeSize;
+    myInlinedMethods++;
+#endif
+
     // We inlined...
     inlineResult->NoteSuccess();
 }
