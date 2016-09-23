@@ -3397,6 +3397,7 @@ void CodeGen::genCodeForTreeNode(GenTreePtr treeNode)
         break;
 
         case GT_LIST:
+        case GT_FIELD_LIST:
         case GT_ARGPLACE:
             // Nothing to do
             break;
@@ -4338,10 +4339,10 @@ void CodeGen::genCodeForCpBlk(GenTreeBlk* cpBlkNode)
 
     assert(!dstAddr->isContained());
     assert(!srcAddr->isContained());
-    assert(cpBlkNode->gtRsvdRegs == RBM_ARG_2);
 
     if (blockSize != 0)
     {
+        assert(cpBlkNode->gtRsvdRegs == RBM_ARG_2);
 #if 0
     // Enable this when we support cpblk loop unrolling.
 
@@ -4352,7 +4353,7 @@ void CodeGen::genCodeForCpBlk(GenTreeBlk* cpBlkNode)
     }
     else
     {
-        noway_assert(cpBlkNode->gtOper == GT_DYN_BLK);
+        noway_assert(cpBlkNode->gtOper == GT_STORE_DYN_BLK);
         genConsumeRegAndCopy(cpBlkNode->AsDynBlk()->gtDynamicSize, REG_ARG_2);
     }
     genConsumeRegAndCopy(srcAddr, REG_ARG_1);
@@ -5147,7 +5148,7 @@ void CodeGen::genConsumeRegs(GenTree* tree)
         }
         else if (tree->OperGet() == GT_AND)
         {
-            // This is the special contained GT_AND that we created in Lowering::LowerCmp()
+            // This is the special contained GT_AND that we created in Lowering::TreeNodeInfoInitCmp()
             // Now we need to consume the operands of the GT_AND node.
             genConsumeOperands(tree->AsOp());
         }
@@ -5321,7 +5322,7 @@ void CodeGen::genCallInstruction(GenTreePtr node)
     // Consume all the arg regs
     for (GenTreePtr list = call->gtCallLateArgs; list; list = list->MoveNext())
     {
-        assert(list->IsList());
+        assert(list->OperIsList());
 
         GenTreePtr argNode = list->Current();
 
@@ -5332,7 +5333,7 @@ void CodeGen::genCallInstruction(GenTreePtr node)
             continue;
 
         // Deal with multi register passed struct args.
-        if (argNode->OperGet() == GT_LIST)
+        if (argNode->OperGet() == GT_FIELD_LIST)
         {
             GenTreeArgList* argListPtr   = argNode->AsArgList();
             unsigned        iterationNum = 0;
@@ -6759,7 +6760,7 @@ void CodeGen::genPutArgStk(GenTreePtr treeNode)
         varNumOut    = compiler->lvaOutgoingArgSpaceVar;
         argOffsetMax = compiler->lvaOutgoingArgSpaceSize;
     }
-    bool isStruct = (targetType == TYP_STRUCT) || (source->OperGet() == GT_LIST);
+    bool isStruct = (targetType == TYP_STRUCT) || (source->OperGet() == GT_FIELD_LIST);
 
     if (!isStruct) // a normal non-Struct argument
     {
@@ -6785,24 +6786,24 @@ void CodeGen::genPutArgStk(GenTreePtr treeNode)
     {
         assert(source->isContained()); // We expect that this node was marked as contained in LowerArm64
 
-        if (source->OperGet() == GT_LIST)
+        if (source->OperGet() == GT_FIELD_LIST)
         {
             // Deal with the multi register passed struct args.
-            GenTreeArgList* argListPtr = source->AsArgList();
+            GenTreeFieldList* fieldListPtr = source->AsFieldList();
 
-            // Evaluate each of the GT_LIST items into their register
+            // Evaluate each of the GT_FIELD_LIST items into their register
             // and store their register into the outgoing argument area
-            for (; argListPtr != nullptr; argListPtr = argListPtr->Rest())
+            for (; fieldListPtr != nullptr; fieldListPtr = fieldListPtr->Rest())
             {
-                GenTreePtr nextArgNode = argListPtr->gtOp.gtOp1;
+                GenTreePtr nextArgNode = fieldListPtr->gtOp.gtOp1;
                 genConsumeReg(nextArgNode);
 
                 regNumber reg  = nextArgNode->gtRegNum;
                 var_types type = nextArgNode->TypeGet();
                 emitAttr  attr = emitTypeSize(type);
 
-                // Emit store instructions to store the registers produced by the GT_LIST into the outgoing argument
-                // area
+                // Emit store instructions to store the registers produced by the GT_FIELD_LIST into the outgoing
+                // argument area
                 emit->emitIns_S_R(ins_Store(type), attr, reg, varNumOut, argOffsetOut);
                 argOffsetOut += EA_SIZE_IN_BYTES(attr);
                 assert(argOffsetOut <= argOffsetMax); // We can't write beyound the outgoing area area

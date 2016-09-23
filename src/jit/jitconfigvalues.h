@@ -17,7 +17,6 @@ CONFIG_INTEGER(DebugBreakOnVerificationFailure, W("DebugBreakOnVerificationFailu
                                                                                          // verification failure
 CONFIG_INTEGER(DiffableDasm, W("JitDiffableDasm"), 0)            // Make the disassembly diff-able
 CONFIG_INTEGER(DisplayLoopHoistStats, W("JitLoopHoistStats"), 0) // Display JIT loop hoisting statistics
-CONFIG_INTEGER(DisplayMemStats, W("JitMemStats"), 0)             // Display JIT memory usage statistics
 CONFIG_INTEGER(DumpJittedMethods, W("DumpJittedMethods"), 0)     // Prints all jitted methods to the console
 CONFIG_INTEGER(EnablePCRelAddr, W("JitEnablePCRelAddr"), 1)      // Whether absolute addr be encoded as PC-rel offset by
                                                                  // RyuJIT where possible
@@ -93,6 +92,9 @@ CONFIG_INTEGER(JitNoMemoryBarriers, W("JitNoMemoryBarriers"), 0) // If 1, don't 
 CONFIG_INTEGER(JitNoRegLoc, W("JitNoRegLoc"), 0)
 CONFIG_INTEGER(JitNoStructPromotion, W("JitNoStructPromotion"), 0) // Disables struct promotion in Jit32
 CONFIG_INTEGER(JitNoUnroll, W("JitNoUnroll"), 0)
+#ifdef FEATURE_ENABLE_NO_RANGE_CHECKS
+CONFIG_INTEGER(JitNoRangeChks, W("JitNoRngChks"), 0) // If 1, don't generate range checks
+#endif
 CONFIG_INTEGER(JitOrder, W("JitOrder"), 0)
 CONFIG_INTEGER(JitPInvokeCheckEnabled, W("JITPInvokeCheckEnabled"), 0)
 CONFIG_INTEGER(JitPInvokeEnabled, W("JITPInvokeEnabled"), 1)
@@ -205,6 +207,15 @@ CONFIG_INTEGER(JitEnableNoWayAssert, W("JitEnableNoWayAssert"), 0)
 #else  // defined(DEBUG) || defined(_DEBUG)
 CONFIG_INTEGER(JitEnableNoWayAssert, W("JitEnableNoWayAssert"), 1)
 #endif // !defined(DEBUG) && !defined(_DEBUG)
+
+// The following should be wrapped inside "#if MEASURE_MEM_ALLOC / #endif", but
+// some files include this one without bringing in the definitions from "jit.h"
+// so we don't always know what the "true" value of that flag should be. For now
+// we take the easy way out and always include the flag, even in release builds
+// (normally MEASURE_MEM_ALLOC is off for release builds but if it's toggled on
+// for release in "jit.h" the flag would be missing for some includers).
+// TODO-Cleanup: need to make 'MEASURE_MEM_ALLOC' well-defined here at all times.
+CONFIG_INTEGER(DisplayMemStats, W("JitMemStats"), 0) // Display JIT memory usage statistics
 
 CONFIG_INTEGER(JitAggressiveInlining, W("JitAggressiveInlining"), 0) // Aggressive inlining of all methods
 CONFIG_INTEGER(JitELTHookEnabled, W("JitELTHookEnabled"), 0) // On ARM, setting this will emit Enter/Leave/TailCall

@@ -382,7 +382,6 @@ HRESULT CEECompileInfo::LoadAssemblyByPath(
 
     Assembly * pAssembly;
     HRESULT    hrProcessLibraryBitnessMismatch = S_OK;
-    bool       verifyingImageIsAssembly = false;
 
     // We don't want to do a LoadFrom, since they do not work with ngen. Instead,
     // read the metadata from the file and do a bind based on that.
@@ -416,9 +415,6 @@ HRESULT CEECompileInfo::LoadAssemblyByPath(
                 fExplicitBindToNativeImage ? MDInternalImport_NoCache : MDInternalImport_Default);
         }
 
-#if defined(FEATURE_WINDOWSPHONE)
-        verifyingImageIsAssembly = true;
-#endif // FEATURE_WINDOWSPHONE
         if (fExplicitBindToNativeImage && !pImage->HasReadyToRunHeader())
         {
             pImage->VerifyIsNIAssembly();
@@ -427,8 +423,6 @@ HRESULT CEECompileInfo::LoadAssemblyByPath(
         {
             pImage->VerifyIsAssembly();
         }
-        
-        verifyingImageIsAssembly = false;
 
         // Check to make sure the bitness of the assembly matches the bitness of the process
         // we will be loading it into and store the result.  If a COR_IMAGE_ERROR gets thrown
@@ -552,11 +546,7 @@ HRESULT CEECompileInfo::LoadAssemblyByPath(
     }
     EX_CATCH_HRESULT(hr);
     
-    if (verifyingImageIsAssembly && hr != S_OK)
-    {
-        hr = NGEN_E_FILE_NOT_ASSEMBLY;
-    }
-    else if ( hrProcessLibraryBitnessMismatch != S_OK && ( hr == COR_E_BADIMAGEFORMAT || hr == HRESULT_FROM_WIN32(ERROR_BAD_EXE_FORMAT) ) )
+    if ( hrProcessLibraryBitnessMismatch != S_OK && ( hr == COR_E_BADIMAGEFORMAT || hr == HRESULT_FROM_WIN32(ERROR_BAD_EXE_FORMAT) ) )
     {
         hr = hrProcessLibraryBitnessMismatch;
     }
@@ -3060,6 +3050,13 @@ private:
     DWORD m_dwExtraData;
     LPCWSTR m_wszManagedPDBSearchPath;
 
+	// Currently The DiasymWriter does not use the correct PDB signature for NGEN PDBS unless 
+	// the NGEN DLL whose symbols are being generated end in .ni.dll.   Thus we copy
+	// to this name if it does not follow this covention (as is true with readyToRun
+	// dlls).   This variable remembers this temp file path so we can delete it after
+	// Pdb generation.   If DiaSymWriter is fixed, we can remove this.  
+	SString m_tempSourceDllName;
+
     // Interfaces for reading IL PDB info
     ReleaseHolder<ISymUnmanagedBinder> m_pBinder;
     ReleaseHolder<ISymUnmanagedReader> m_pReader;
@@ -3107,6 +3104,8 @@ public:
 
         ZeroMemory(m_wszPDBFilePath, sizeof(m_wszPDBFilePath));
     }
+
+	~NGenModulePdbWriter();
     
     HRESULT WritePDBData();
 
@@ -3407,6 +3406,13 @@ HRESULT NGenModulePdbWriter::InitILPdbData()
     return S_OK;
 }
 
+NGenModulePdbWriter::~NGenModulePdbWriter()
+{
+	// Delete any temporary files we created. 
+	if (m_tempSourceDllName.GetCount() != 0)
+		DeleteFileW(m_tempSourceDllName);
+	m_tempSourceDllName.Clear();
+}
 
 //---------------------------------------------------------------------------------------
 //
@@ -3441,8 +3447,32 @@ HRESULT NGenModulePdbWriter::WritePDBData()
 
     PEImageLayout * pLoadedLayout = m_pModule->GetFile()->GetLoaded();
 
+	// Currently DiaSymReader does not work properly generating NGEN PDBS unless 
+	// the DLL whose PDB is being generated ends in .ni.*.   Unfortunately, readyToRun
+	// images do not follow this convention and end up producing bad PDBS.  To fix
+	// this (without changing diasymreader.dll which ships indepdendently of .Net Core)
+	// we copy the file to somethign with this convention before generating the PDB
+	// and delete it when we are done.  
+	SString dllPath = pLoadedLayout->GetPath();
+	if (!dllPath.EndsWithCaseInsensitive(L".ni.dll") && !dllPath.EndsWithCaseInsensitive(L".ni.exe"))
+	{
+		SString::Iterator fileNameStart = dllPath.Begin();
+		dllPath.FindBack(fileNameStart, '\\');
+
+		SString::Iterator ext = dllPath.End();
+		dllPath.FindBack(ext, '.');
+
+		// m_tempSourceDllName = Convertion of  INPUT.dll  to INPUT.ni.dll where the PDB lives.  
+		m_tempSourceDllName = m_wszPdbPath;
+		m_tempSourceDllName += SString(dllPath, fileNameStart, ext - fileNameStart);
+		m_tempSourceDllName += L".ni";
+		m_tempSourceDllName += SString(dllPath, ext, dllPath.End() - ext);
+		CopyFileW(dllPath, m_tempSourceDllName, false);
+		dllPath = m_tempSourceDllName;
+	}
+
     ReleaseHolder<ISymNGenWriter> pWriter1;
-    hr = m_Create(pLoadedLayout->GetPath(), m_wszPdbPath, &pWriter1);
+    hr = m_Create(dllPath, m_wszPdbPath, &pWriter1);
     if (FAILED(hr))
         return hr;
     

@@ -2985,8 +2985,8 @@ void Compiler::fgRemovePreds()
 {
     C_ASSERT(offsetof(BasicBlock, bbPreds) ==
              offsetof(BasicBlock, bbCheapPreds)); // bbPreds and bbCheapPreds are at the same place in a union,
-    C_ASSERT(sizeof(((BasicBlock*)0)->bbPreds) ==
-             sizeof(((BasicBlock*)0)->bbCheapPreds)); // and are the same size. So, this function removes both.
+    C_ASSERT(sizeof(((BasicBlock*)nullptr)->bbPreds) ==
+             sizeof(((BasicBlock*)nullptr)->bbCheapPreds)); // and are the same size. So, this function removes both.
 
     for (BasicBlock* block = fgFirstBB; block != nullptr; block = block->bbNext)
     {
@@ -9339,6 +9339,7 @@ inline bool OperIsControlFlow(genTreeOps oper)
     switch (oper)
     {
         case GT_JTRUE:
+        case GT_JCC:
         case GT_SWITCH:
         case GT_LABEL:
 
@@ -10019,10 +10020,10 @@ void Compiler::fgUnreachableBlock(BasicBlock* block)
 
 /*****************************************************************************************************
  *
- *  Function called to remove or morph a GT_JTRUE statement when we jump to the same
+ *  Function called to remove or morph a jump when we jump to the same
  *  block when both the condition is true or false.
  */
-void Compiler::fgRemoveJTrue(BasicBlock* block)
+void Compiler::fgRemoveConditionalJump(BasicBlock* block)
 {
     noway_assert(block->bbJumpKind == BBJ_COND && block->bbJumpDest == block->bbNext);
     assert(compRationalIRForm == block->IsLIR());
@@ -10053,7 +10054,7 @@ void Compiler::fgRemoveJTrue(BasicBlock* block)
         LIR::Range& blockRange = LIR::AsRange(block);
 
         GenTree* test = blockRange.LastNode();
-        assert(test->OperGet() == GT_JTRUE);
+        assert(test->OperIsConditionalJump());
 
         bool               isClosed;
         unsigned           sideEffects;
@@ -10109,7 +10110,7 @@ void Compiler::fgRemoveJTrue(BasicBlock* block)
         {
             test->gtStmtExpr = sideEffList;
 
-            fgMorphBlockStmt(block, test DEBUGARG("fgRemoveJTrue"));
+            fgMorphBlockStmt(block, test DEBUGARG("fgRemoveConditionalJump"));
         }
     }
 }
@@ -10545,7 +10546,7 @@ void Compiler::fgRemoveBlock(BasicBlock* block, bool unreachable)
                         // Make sure we are replacing "block" with "succBlock" in predBlock->bbJumpDest.
                         noway_assert(predBlock->bbJumpDest == block);
                         predBlock->bbJumpDest = succBlock;
-                        fgRemoveJTrue(predBlock);
+                        fgRemoveConditionalJump(predBlock);
                         break;
                     }
 
@@ -10605,7 +10606,7 @@ void Compiler::fgRemoveBlock(BasicBlock* block, bool unreachable)
                 /* Check for branch to next block */
                 if (bPrev->bbJumpDest == bPrev->bbNext)
                 {
-                    fgRemoveJTrue(bPrev);
+                    fgRemoveConditionalJump(bPrev);
                 }
                 break;
 
@@ -13489,6 +13490,7 @@ bool Compiler::fgOptimizeSwitchBranches(BasicBlock* block)
         GenTree* switchVal = switchTree->gtOp.gtOp1;
         noway_assert(genActualTypeIsIntOrI(switchVal->TypeGet()));
 
+#ifndef LEGACY_BACKEND
         // If we are in LIR, remove the jump table from the block.
         if (block->IsLIR())
         {
@@ -13496,6 +13498,7 @@ bool Compiler::fgOptimizeSwitchBranches(BasicBlock* block)
             assert(jumpTable->OperGet() == GT_JMPTABLE);
             blockRange->Remove(jumpTable);
         }
+#endif
 
         // Change the GT_SWITCH(switchVal) into GT_JTRUE(GT_EQ(switchVal==0)).
         // Also mark the node as GTF_DONT_CSE as further down JIT is not capable of handling it.
@@ -13793,7 +13796,7 @@ bool Compiler::fgOptimizeBranchToNext(BasicBlock* block, BasicBlock* bNext, Basi
         {
             LIR::Range& blockRange = LIR::AsRange(block);
             GenTree*    jmp        = blockRange.LastNode();
-            assert(jmp->OperGet() == GT_JTRUE);
+            assert(jmp->OperIsConditionalJump());
 
             bool               isClosed;
             unsigned           sideEffects;
@@ -15879,11 +15882,18 @@ bool Compiler::fgUpdateFlowGraph(bool doTailDuplication)
                         /* Reverse the jump condition */
 
                         GenTree* test = block->lastNode();
-                        noway_assert(test->gtOper == GT_JTRUE);
+                        noway_assert(test->OperIsConditionalJump());
 
-                        GenTree* cond = gtReverseCond(test->gtOp.gtOp1);
-                        assert(cond == test->gtOp.gtOp1); // Ensure `gtReverseCond` did not create a new node.
-                        test->gtOp.gtOp1 = cond;
+                        if (test->OperGet() == GT_JTRUE)
+                        {
+                            GenTree* cond = gtReverseCond(test->gtOp.gtOp1);
+                            assert(cond == test->gtOp.gtOp1); // Ensure `gtReverseCond` did not create a new node.
+                            test->gtOp.gtOp1 = cond;
+                        }
+                        else
+                        {
+                            gtReverseCond(test);
+                        }
 
                         // Optimize the Conditional JUMP to go to the new target
                         block->bbJumpDest = bNext->bbJumpDest;
@@ -18020,9 +18030,13 @@ void Compiler::fgSetTreeSeqFinish(GenTreePtr tree, bool isLIR)
 {
     // If we are sequencing a node that does not appear in LIR,
     // do not add it to the list.
-    if (isLIR && (((tree->OperGet() == GT_LIST) && !tree->AsArgList()->IsAggregate()) || tree->OperGet() == GT_ARGPLACE))
+    if (isLIR)
     {
-        return;
+        if ((tree->OperGet() == GT_LIST) || (tree->OperGet() == GT_ARGPLACE) ||
+            (tree->OperGet() == GT_FIELD_LIST && !tree->AsFieldList()->IsFieldListHead()))
+        {
+            return;
+        }
     }
 
     /* Append to the node list */
@@ -18359,7 +18373,7 @@ void Compiler::fgSetBlockOrder(BasicBlock* block)
 //
 //    For the (usual) case of GT_BLK or GT_OBJ, the size is always "evaluated" (i.e.
 //    instantiated into a register) last. In those cases, the GTF_REVERSE_OPS flag
-//    on the assignment works as usual.          
+//    on the assignment works as usual.
 //    In order to preserve previous possible orderings, the order for evaluating
 //    the size of a GT_DYN_BLK node is controlled by its gtEvalSizeFirst flag. If
 //    that is set, the size is evaluated first, and then the src and dst are evaluated
@@ -18968,7 +18982,7 @@ bool               Compiler::fgDumpFlowGraph(Phases phase)
     {
         createDotFile = true;
     }
-            
+
     FILE*   fgxFile   = fgOpenFlowGraphFile(&dontClose, phase, createDotFile ? W("dot") : W("fgx"));
 
     if (fgxFile == nullptr)
@@ -19049,7 +19063,7 @@ bool               Compiler::fgDumpFlowGraph(Phases phase)
         fprintf(fgxFile,            ">");
     }
 
-    static const char* kindImage[] = { "EHFINALLYRET", "EHFILTERRET", "EHCATCHRET", 
+    static const char* kindImage[] = { "EHFINALLYRET", "EHFILTERRET", "EHCATCHRET",
                                        "THROW", "RETURN", "NONE", "ALWAYS", "LEAVE",
                                        "CALLFINALLY", "COND", "SWITCH" };
 
@@ -19681,7 +19695,7 @@ void                Compiler::fgDispBasicBlocks(BasicBlock*  firstBlock,
         {
             printf("bad prev link!\n");
         }
-            
+
         if (block == fgFirstColdBlock)
         {
             printf("~~~~~~%*s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%*s~~~~~~~~~~~~~~~~~~~~~~~%*s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n",
@@ -19782,7 +19796,7 @@ void                Compiler::fgDumpTrees(BasicBlock*  firstBlock,
 
     /* Walk the basic blocks */
 
-    // Note that typically we have already called fgDispBasicBlocks() 
+    // Note that typically we have already called fgDispBasicBlocks()
     //  so we don't need to print the preds and succs again here
     //
     for (BasicBlock* block = firstBlock; block; block = block->bbNext)
@@ -19807,17 +19821,34 @@ Compiler::fgWalkResult      Compiler::fgStress64RsltMulCB(GenTreePtr* pTree, fgW
 {
     GenTreePtr tree = *pTree;
     Compiler*  pComp = data->compiler;
-    
+
     if (tree->gtOper != GT_MUL || tree->gtType != TYP_INT || (tree->gtOverflow())) {
         return WALK_CONTINUE;
-}
+    }
+
+#ifdef DEBUG
+    if (pComp->verbose)
+    {
+        printf("STRESS_64RSLT_MUL before:\n");
+        pComp->gtDispTree(tree);
+    }
+#endif // DEBUG
 
     // To ensure optNarrowTree() doesn't fold back to the original tree.
-    tree->gtOp.gtOp1 = pComp->gtNewOperNode(GT_NOP, TYP_LONG, tree->gtOp.gtOp1); 
     tree->gtOp.gtOp1 = pComp->gtNewCastNode(TYP_LONG, tree->gtOp.gtOp1, TYP_LONG);
-    tree->gtOp.gtOp2 = pComp->gtNewCastNode(TYP_LONG, tree->gtOp.gtOp2,  TYP_LONG);
+    tree->gtOp.gtOp1 = pComp->gtNewOperNode(GT_NOP, TYP_LONG, tree->gtOp.gtOp1);
+    tree->gtOp.gtOp1 = pComp->gtNewCastNode(TYP_LONG, tree->gtOp.gtOp1, TYP_LONG);
+    tree->gtOp.gtOp2 = pComp->gtNewCastNode(TYP_LONG, tree->gtOp.gtOp2, TYP_LONG);
     tree->gtType = TYP_LONG;
     *pTree = pComp->gtNewCastNode(TYP_INT, tree, TYP_INT);
+
+#ifdef DEBUG
+    if (pComp->verbose)
+    {
+        printf("STRESS_64RSLT_MUL after:\n");
+        pComp->gtDispTree(*pTree);
+    }
+#endif // DEBUG
 
     return WALK_SKIP_SUBTREES;
 }
@@ -19826,7 +19857,7 @@ void                Compiler::fgStress64RsltMul()
 {
     if (!compStressCompile(STRESS_64RSLT_MUL, 20)) {
         return;
-}
+    }
 
     fgWalkAllTreesPre(fgStress64RsltMulCB, (void*)this);
 }
@@ -19858,7 +19889,7 @@ void                Compiler::fgDebugCheckBBlist(bool checkBBNum  /* = false */,
 #endif // DEBUG
 
     fgDebugCheckBlockLinks();
-    
+
     if (fgBBcount > 10000 && expensiveDebugCheckLevel < 1)
     {
         // The basic block checks are too expensive if there are too many blocks,
@@ -19920,11 +19951,11 @@ void                Compiler::fgDebugCheckBBlist(bool checkBBNum  /* = false */,
 
         // If the block is a BBJ_COND, a BBJ_SWITCH or a
         // lowered GT_SWITCH_TABLE node then make sure it
-        // ends with a GT_JTRUE or a GT_SWITCH
+        // ends with a conditional jump or a GT_SWITCH
 
         if (block->bbJumpKind == BBJ_COND)
         {
-            noway_assert(block->lastNode()->gtNext == nullptr && block->lastNode()->gtOper == GT_JTRUE);
+            noway_assert(block->lastNode()->gtNext == nullptr && block->lastNode()->OperIsConditionalJump());
         }
         else if (block->bbJumpKind == BBJ_SWITCH)
         {
@@ -20302,21 +20333,56 @@ void                Compiler::fgDebugCheckFlags(GenTreePtr tree)
             }
             break;
 
+        case GT_LIST:
+        case GT_FIELD_LIST:
+            if ((op2 != nullptr) && op2->OperIsAnyList())
+            {
+                ArrayStack<GenTree *> stack(this);
+                while ((tree->gtGetOp2() != nullptr) && tree->gtGetOp2()->OperIsAnyList())
+                {
+                    stack.Push(tree);
+                    tree = tree->gtGetOp2();
+                }
+
+                fgDebugCheckFlags(tree);
+
+                while (stack.Height() > 0)
+                {
+                    tree = stack.Pop();
+                    assert((tree->gtFlags & GTF_REVERSE_OPS) == 0);
+                    fgDebugCheckFlags(tree->gtOp.gtOp1);
+                    chkFlags |= (tree->gtOp.gtOp1->gtFlags & GTF_ALL_EFFECT);
+                    chkFlags |= (tree->gtGetOp2()->gtFlags & GTF_ALL_EFFECT);
+                    fgDebugCheckFlagsHelper(tree, (tree->gtFlags & GTF_ALL_EFFECT), chkFlags);
+                }
+
+                return;
+            }
+            break;
+
         default:
             break;
         }
 
         /* Recursively check the subtrees */
 
-        if (op1) { fgDebugCheckFlags(op1);
-}
-        if (op2) { fgDebugCheckFlags(op2);
-}
+        if (op1)
+        {
+            fgDebugCheckFlags(op1);
+        }
+        if (op2)
+        {
+            fgDebugCheckFlags(op2);
+        }
 
-        if (op1) { chkFlags   |= (op1->gtFlags & GTF_ALL_EFFECT);
-}
-        if (op2) { chkFlags   |= (op2->gtFlags & GTF_ALL_EFFECT);
-}
+        if (op1)
+        {
+            chkFlags   |= (op1->gtFlags & GTF_ALL_EFFECT);
+        }
+        if (op2)
+        {
+            chkFlags   |= (op2->gtFlags & GTF_ALL_EFFECT);
+        }
 
         // We reuse the value of GTF_REVERSE_OPS for a GT_IND-specific flag,
         // so exempt that (unary) operator.
@@ -20378,131 +20444,150 @@ void                Compiler::fgDebugCheckFlags(GenTreePtr tree)
 
     /* See what kind of a special operator we have here */
 
-    else { switch  (tree->OperGet())
+    else
     {
-    case GT_CALL:
-
-        GenTreePtr      args;
-        GenTreePtr      argx;
-        GenTreeCall*    call;
-        
-        call = tree->AsCall();
-
-        chkFlags |= GTF_CALL;
-
-        if ((treeFlags & GTF_EXCEPT) && !(chkFlags & GTF_EXCEPT))
+        switch  (tree->OperGet())
         {
-            switch (eeGetHelperNum(tree->gtCall.gtCallMethHnd))
+        case GT_CALL:
+
+            GenTreePtr      args;
+            GenTreePtr      argx;
+            GenTreeCall*    call;
+
+            call = tree->AsCall();
+
+            chkFlags |= GTF_CALL;
+
+            if ((treeFlags & GTF_EXCEPT) && !(chkFlags & GTF_EXCEPT))
             {
-                // Is this a helper call that can throw an exception ?
-            case CORINFO_HELP_LDIV:
-            case CORINFO_HELP_LMOD:
-            case CORINFO_HELP_METHOD_ACCESS_CHECK:
-            case CORINFO_HELP_FIELD_ACCESS_CHECK:
-            case CORINFO_HELP_CLASS_ACCESS_CHECK:
-            case CORINFO_HELP_DELEGATE_SECURITY_CHECK:
-                chkFlags |= GTF_EXCEPT;
-                break;
-            default:
-                break;
+                switch (eeGetHelperNum(tree->gtCall.gtCallMethHnd))
+                {
+                    // Is this a helper call that can throw an exception ?
+                case CORINFO_HELP_LDIV:
+                case CORINFO_HELP_LMOD:
+                case CORINFO_HELP_METHOD_ACCESS_CHECK:
+                case CORINFO_HELP_FIELD_ACCESS_CHECK:
+                case CORINFO_HELP_CLASS_ACCESS_CHECK:
+                case CORINFO_HELP_DELEGATE_SECURITY_CHECK:
+                    chkFlags |= GTF_EXCEPT;
+                    break;
+                default:
+                    break;
+                }
             }
-        }
 
-        if (call->gtCallObjp)
-        {
-            fgDebugCheckFlags(call->gtCallObjp);
-            chkFlags |= (call->gtCallObjp->gtFlags & GTF_SIDE_EFFECT);
-
-            if (call->gtCallObjp->gtFlags & GTF_ASG)
+            if (call->gtCallObjp)
             {
-                treeFlags |= GTF_ASG;
+                fgDebugCheckFlags(call->gtCallObjp);
+                chkFlags |= (call->gtCallObjp->gtFlags & GTF_SIDE_EFFECT);
+
+                if (call->gtCallObjp->gtFlags & GTF_ASG)
+                {
+                    treeFlags |= GTF_ASG;
+                }
             }
-        }
 
-        for (args = call->gtCallArgs; args; args = args->gtOp.gtOp2)
-        {
-            argx = args->gtOp.gtOp1;
-            fgDebugCheckFlags(argx);
-
-            chkFlags |= (argx->gtFlags & GTF_SIDE_EFFECT);
-
-            if (argx->gtFlags & GTF_ASG)
+            for (args = call->gtCallArgs; args; args = args->gtOp.gtOp2)
             {
-                treeFlags |= GTF_ASG;
+                argx = args->gtOp.gtOp1;
+                fgDebugCheckFlags(argx);
+
+                chkFlags |= (argx->gtFlags & GTF_SIDE_EFFECT);
+
+                if (argx->gtFlags & GTF_ASG)
+                {
+                    treeFlags |= GTF_ASG;
+                }
             }
-        }
 
-        for (args = call->gtCallLateArgs; args; args = args->gtOp.gtOp2)
-        {
-            argx = args->gtOp.gtOp1;
-            fgDebugCheckFlags(argx);
-
-            chkFlags |= (argx->gtFlags & GTF_SIDE_EFFECT);
-
-            if (argx->gtFlags & GTF_ASG)
+            for (args = call->gtCallLateArgs; args; args = args->gtOp.gtOp2)
             {
-                treeFlags |= GTF_ASG;
+                argx = args->gtOp.gtOp1;
+                fgDebugCheckFlags(argx);
+
+                chkFlags |= (argx->gtFlags & GTF_SIDE_EFFECT);
+
+                if (argx->gtFlags & GTF_ASG)
+                {
+                    treeFlags |= GTF_ASG;
+                }
             }
-        }
 
-        if ((call->gtCallType == CT_INDIRECT) && (call->gtCallCookie != nullptr))
-        {
-            fgDebugCheckFlags(call->gtCallCookie);
-            chkFlags |= (call->gtCallCookie->gtFlags & GTF_SIDE_EFFECT);
-        }
-
-        if (call->gtCallType == CT_INDIRECT)
-        {
-            fgDebugCheckFlags(call->gtCallAddr);
-            chkFlags |= (call->gtCallAddr->gtFlags & GTF_SIDE_EFFECT);
-        }
-
-        if (call->IsUnmanaged() &&
-            (call->gtCallMoreFlags & GTF_CALL_M_UNMGD_THISCALL))
-        {
-            if (call->gtCallArgs->gtOp.gtOp1->OperGet() == GT_NOP)
+            if ((call->gtCallType == CT_INDIRECT) && (call->gtCallCookie != nullptr))
             {
-                noway_assert(call->gtCallLateArgs->gtOp.gtOp1->TypeGet() == TYP_I_IMPL ||
-                             call->gtCallLateArgs->gtOp.gtOp1->TypeGet() == TYP_BYREF);
+                fgDebugCheckFlags(call->gtCallCookie);
+                chkFlags |= (call->gtCallCookie->gtFlags & GTF_SIDE_EFFECT);
             }
-            else
+
+            if (call->gtCallType == CT_INDIRECT)
             {
-                noway_assert(call->gtCallArgs->gtOp.gtOp1->TypeGet() == TYP_I_IMPL ||
-                             call->gtCallArgs->gtOp.gtOp1->TypeGet() == TYP_BYREF);
+                fgDebugCheckFlags(call->gtCallAddr);
+                chkFlags |= (call->gtCallAddr->gtFlags & GTF_SIDE_EFFECT);
             }
+
+            if (call->IsUnmanaged() &&
+                (call->gtCallMoreFlags & GTF_CALL_M_UNMGD_THISCALL))
+            {
+                if (call->gtCallArgs->gtOp.gtOp1->OperGet() == GT_NOP)
+                {
+                    noway_assert(call->gtCallLateArgs->gtOp.gtOp1->TypeGet() == TYP_I_IMPL ||
+                                 call->gtCallLateArgs->gtOp.gtOp1->TypeGet() == TYP_BYREF);
+                }
+                else
+                {
+                    noway_assert(call->gtCallArgs->gtOp.gtOp1->TypeGet() == TYP_I_IMPL ||
+                                 call->gtCallArgs->gtOp.gtOp1->TypeGet() == TYP_BYREF);
+                }
+            }
+            break;
+
+        case GT_ARR_ELEM:
+
+            GenTreePtr      arrObj;
+            unsigned        dim;
+
+            arrObj = tree->gtArrElem.gtArrObj;
+            fgDebugCheckFlags(arrObj);
+            chkFlags   |= (arrObj->gtFlags & GTF_ALL_EFFECT);
+
+            for (dim = 0; dim < tree->gtArrElem.gtArrRank; dim++)
+            {
+                fgDebugCheckFlags(tree->gtArrElem.gtArrInds[dim]);
+                chkFlags |= tree->gtArrElem.gtArrInds[dim]->gtFlags & GTF_ALL_EFFECT;
+            }
+            break;
+
+        case GT_ARR_OFFSET:
+            fgDebugCheckFlags(tree->gtArrOffs.gtOffset);
+            chkFlags   |= (tree->gtArrOffs.gtOffset->gtFlags & GTF_ALL_EFFECT);
+            fgDebugCheckFlags(tree->gtArrOffs.gtIndex);
+            chkFlags   |= (tree->gtArrOffs.gtIndex->gtFlags & GTF_ALL_EFFECT);
+            fgDebugCheckFlags(tree->gtArrOffs.gtArrObj);
+            chkFlags   |= (tree->gtArrOffs.gtArrObj->gtFlags & GTF_ALL_EFFECT);
+            break;
+
+        default:
+            break;
         }
-        break;
-
-    case GT_ARR_ELEM:
-
-        GenTreePtr      arrObj;
-        unsigned        dim;
-
-        arrObj = tree->gtArrElem.gtArrObj;
-        fgDebugCheckFlags(arrObj);
-        chkFlags   |= (arrObj->gtFlags & GTF_ALL_EFFECT);
-
-        for (dim = 0; dim < tree->gtArrElem.gtArrRank; dim++)
-        {
-            fgDebugCheckFlags(tree->gtArrElem.gtArrInds[dim]);
-            chkFlags |= tree->gtArrElem.gtArrInds[dim]->gtFlags & GTF_ALL_EFFECT;
-        }
-        break;
-
-    case GT_ARR_OFFSET:
-        fgDebugCheckFlags(tree->gtArrOffs.gtOffset);
-        chkFlags   |= (tree->gtArrOffs.gtOffset->gtFlags & GTF_ALL_EFFECT);
-        fgDebugCheckFlags(tree->gtArrOffs.gtIndex);
-        chkFlags   |= (tree->gtArrOffs.gtIndex->gtFlags & GTF_ALL_EFFECT);
-        fgDebugCheckFlags(tree->gtArrOffs.gtArrObj);
-        chkFlags   |= (tree->gtArrOffs.gtArrObj->gtFlags & GTF_ALL_EFFECT);
-        break;
-
-    default:
-        break;
     }
+
+    fgDebugCheckFlagsHelper(tree, treeFlags, chkFlags);
 }
 
+//------------------------------------------------------------------------------
+// fgDebugCheckFlagsHelper : Check if all bits that are set in chkFlags are also set in treeFlags.
+//
+//
+// Arguments:
+//    tree  - Tree whose flags are being checked
+//    treeFlags - Actual flags on the tree
+//    chkFlags - Expected flags
+//
+// Note:
+//    Checking that all bits that are set in treeFlags are also set in chkFlags is currently disabled.
+
+void  Compiler::fgDebugCheckFlagsHelper(GenTreePtr tree, unsigned treeFlags, unsigned chkFlags)
+{
     if (chkFlags & ~treeFlags)
     {
         // Print the tree so we can see it in the log.
@@ -20524,12 +20609,12 @@ void                Compiler::fgDebugCheckFlags(GenTreePtr tree)
 #if 0
         // TODO-Cleanup:
         /* The tree has extra flags set. However, this will happen if we
-           replace a subtree with something, but don't clear the flags up
-           the tree. Can't flag this unless we start clearing flags above.
+        replace a subtree with something, but don't clear the flags up
+        the tree. Can't flag this unless we start clearing flags above.
 
-           Note: we need this working for GTF_CALL and CSEs, so I'm enabling
-           it for calls.
-           */
+        Note: we need this working for GTF_CALL and CSEs, so I'm enabling
+        it for calls.
+        */
         if (tree->OperGet() != GT_CALL && (treeFlags & GTF_CALL) && !(chkFlags & GTF_CALL))
         {
             // Print the tree so we can see it in the log.
@@ -20545,9 +20630,9 @@ void                Compiler::fgDebugCheckFlags(GenTreePtr tree)
             GenTree::gtDispFlags(treeFlags & ~chkFlags, GTF_DEBUG_NONE);
             printf("\n");
             gtDispTree(tree);
-        }
-#endif // 0
     }
+#endif // 0
+}
 }
 
 // DEBUG routine to check correctness of the internal gtNext, gtPrev threading of a statement.
@@ -20937,7 +21022,7 @@ void                Compiler::fgInline()
                           (void *) this);
 
             // See if stmt is of the form GT_COMMA(call, nop)
-            // If yes, we can get rid of GT_COMMA.            
+            // If yes, we can get rid of GT_COMMA.
             if (expr->OperGet() == GT_COMMA &&
                 expr->gtOp.gtOp1->OperGet() == GT_CALL &&
                 expr->gtOp.gtOp2->OperGet() == GT_NOP)
@@ -21138,14 +21223,14 @@ GenTreePtr Compiler::fgAssignStructInlineeToVar(GenTreePtr child, CORINFO_CLASS_
     // an inlinee that is made of commas. If the inlinee is not a call, then
     // we use a copy block to do the assignment.
     GenTreePtr src = child;
-    GenTreePtr lastComma = NULL;
+    GenTreePtr lastComma = nullptr;
     while (src->gtOper == GT_COMMA)
     {
         lastComma = src;
         src = src->gtOp.gtOp2;
     }
 
-    GenTreePtr newInlinee = NULL;
+    GenTreePtr newInlinee = nullptr;
     if (src->gtOper == GT_CALL)
     {
         // If inlinee was just a call, new inlinee is v05 = call()
@@ -21226,7 +21311,7 @@ Compiler::fgWalkResult      Compiler::fgUpdateInlineReturnExpressionPlaceHolder(
 
     if (tree->gtOper == GT_RET_EXPR)
     {
-        // We are going to copy the tree from the inlinee, 
+        // We are going to copy the tree from the inlinee,
         // so record the handle now.
         //
         if (varTypeIsStruct(tree))
@@ -21242,7 +21327,7 @@ Compiler::fgWalkResult      Compiler::fgUpdateInlineReturnExpressionPlaceHolder(
 #ifdef DEBUG
             if (comp->verbose)
             {
-                printf("\nReplacing the return expression placeholder ");              
+                printf("\nReplacing the return expression placeholder ");
                 printTreeID(tree);
                 printf(" with ");
                 printTreeID(inlineCandidate);
@@ -21252,7 +21337,7 @@ Compiler::fgWalkResult      Compiler::fgUpdateInlineReturnExpressionPlaceHolder(
             }
 #endif // DEBUG
 
-            tree->CopyFrom(inlineCandidate, comp);           
+            tree->CopyFrom(inlineCandidate, comp);
 
 #ifdef DEBUG
             if (comp->verbose)

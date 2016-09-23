@@ -19,14 +19,6 @@ namespace System.Globalization
                                 // so they align with the seasons as well as lunar events.
     }
 
-    public static partial class CharUnicodeInfo
-    {
-        public static int GetDecimalDigitValue(char ch) { throw new NotImplementedException(); }
-        public static int GetDecimalDigitValue(string s, int index) { throw new NotImplementedException(); }
-        public static int GetDigitValue(char ch) { throw new NotImplementedException(); }
-        public static int GetDigitValue(string s, int index) { throw new NotImplementedException(); }
-    }
-
     public partial class CompareInfo : System.Runtime.Serialization.IDeserializationCallback
     {
         public int LCID { get { throw new NotImplementedException(); } }
@@ -159,12 +151,6 @@ namespace System.Globalization
         public override int GetHashCode() { throw new NotImplementedException(); }
         public static bool operator ==(System.Globalization.SortVersion left, System.Globalization.SortVersion right) { throw new NotImplementedException(); }
         public static bool operator !=(System.Globalization.SortVersion left, System.Globalization.SortVersion right) { throw new NotImplementedException(); }
-    }
-
-    public partial class StringInfo 
-    {
-        public string SubstringByTextElements(int startingTextElement) { throw new NotImplementedException(); }
-        public string SubstringByTextElements(int startingTextElement, int lengthInTextElements) { throw new NotImplementedException(); }
     }
 
     public partial class TextInfo : System.ICloneable, System.Runtime.Serialization.IDeserializationCallback 

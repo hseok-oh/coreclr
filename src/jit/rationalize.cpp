@@ -16,44 +16,6 @@ struct SplitData
     Rationalizer* thisPhase;
 };
 
-//------------------------------------------------------------------------------
-// isNodeCallArg - given a context (stack of parent nodes), determine if the TOS is an arg to a call
-//------------------------------------------------------------------------------
-
-GenTree* isNodeCallArg(ArrayStack<GenTree*>* parentStack)
-{
-    for (int i = 1; // 0 is current node, so start at 1
-         i < parentStack->Height(); i++)
-    {
-        GenTree* node = parentStack->Index(i);
-        switch (node->OperGet())
-        {
-            case GT_LIST:
-            case GT_ARGPLACE:
-                break;
-            case GT_NOP:
-                // Currently there's an issue when the rationalizer performs
-                // the fixup of a call argument: the case is when we remove an
-                // inserted NOP as a parent of a call introduced by fgMorph;
-                // when then the rationalizer removes it, the tree stack in the
-                // walk is not consistent with the node it was just deleted, so the
-                // solution is just to go 1 level deeper.
-                // TODO-Cleanup: This has to be fixed in a proper way: make the rationalizer
-                // correctly modify the evaluation stack when removing treenodes.
-                if (node->gtOp.gtOp1->gtOper == GT_CALL)
-                {
-                    return node->gtOp.gtOp1;
-                }
-                break;
-            case GT_CALL:
-                return node;
-            default:
-                return nullptr;
-        }
-    }
-    return nullptr;
-}
-
 // return op that is the store equivalent of the given load opcode
 genTreeOps storeForm(genTreeOps loadForm)
 {
@@ -107,54 +69,6 @@ void copyFlags(GenTree* dst, GenTree* src, unsigned mask)
 {
     dst->gtFlags &= ~mask;
     dst->gtFlags |= (src->gtFlags & mask);
-}
-
-// call args have other pointers to them which must be fixed up if
-// they are replaced
-void Compiler::fgFixupIfCallArg(ArrayStack<GenTree*>* parentStack, GenTree* oldChild, GenTree* newChild)
-{
-    GenTree* parentCall = isNodeCallArg(parentStack);
-    if (!parentCall)
-    {
-        return;
-    }
-
-    // we have replaced an arg, so update pointers in argtable
-    fgFixupArgTabEntryPtr(parentCall, oldChild, newChild);
-}
-
-//------------------------------------------------------------------------
-// fgFixupArgTabEntryPtr: Fixup the fgArgTabEntryPtr of parentCall after
-//                        replacing oldArg with newArg
-//
-// Arguments:
-//    parentCall - a pointer to the parent call node
-//    oldArg     - the original argument node
-//    newArg     - the replacement argument node
-//
-
-void Compiler::fgFixupArgTabEntryPtr(GenTreePtr parentCall, GenTreePtr oldArg, GenTreePtr newArg)
-{
-    assert(parentCall != nullptr);
-    assert(oldArg != nullptr);
-    assert(newArg != nullptr);
-
-    JITDUMP("parent call was :\n");
-    DISPNODE(parentCall);
-
-    JITDUMP("old child was :\n");
-    DISPNODE(oldArg);
-
-    if (oldArg->gtFlags & GTF_LATE_ARG)
-    {
-        newArg->gtFlags |= GTF_LATE_ARG;
-    }
-    else
-    {
-        fgArgTabEntryPtr fp = Compiler::gtArgEntryByNode(parentCall, oldArg);
-        assert(fp->node == oldArg);
-        fp->node = newArg;
-    }
 }
 
 // Rewrite a SIMD indirection as GT_IND(GT_LEA(obj.op1)), or as a simple
@@ -248,7 +162,16 @@ void Rationalizer::RewriteNodeAsCall(GenTree**             use,
 #endif
 
     // Replace "tree" with "call"
-    *use = call;
+    if (data->parentStack->Height() > 1)
+    {
+        data->parentStack->Index(1)->ReplaceOperand(use, call);
+    }
+    else
+    {
+        // If there's no parent, the tree being replaced is the root of the
+        // statement (and no special handling is necessary).
+        *use = call;
+    }
 
     // Rebuild the evaluation order.
     comp->gtSetStmtInfo(root);
@@ -277,8 +200,6 @@ void Rationalizer::RewriteNodeAsCall(GenTree**             use,
         treeLastNode->gtNext = treeNextNode;
         treeNextNode->gtPrev = treeLastNode;
     }
-
-    comp->fgFixupIfCallArg(data->parentStack, tree, call);
 
     // Propagate flags of "call" to its parents.
     // 0 is current node, so start at 1
@@ -605,7 +526,7 @@ void Rationalizer::RewriteAssignment(LIR::Use& use)
             }
             JITDUMP("Rewriting GT_ASG(%s(X), Y) to %s(X,Y):\n", GenTree::NodeName(location->gtOper),
                     GenTree::NodeName(storeOper));
-            storeBlk->gtOper = storeOper;
+            storeBlk->SetOperRaw(storeOper);
             storeBlk->gtFlags &= ~GTF_DONT_CSE;
             storeBlk->gtFlags |= (assignment->gtFlags & (GTF_ALL_EFFECT | GTF_REVERSE_OPS | GTF_BLK_VOLATILE |
                                                          GTF_BLK_UNALIGNED | GTF_BLK_INIT | GTF_DONT_CSE));
@@ -693,21 +614,20 @@ Compiler::fgWalkResult Rationalizer::RewriteNode(GenTree** useEdge, ArrayStack<G
     const bool isLateArg = (node->gtFlags & GTF_LATE_ARG) != 0;
 #endif
 
-    // First, remove any preceeding GT_LIST nodes, which are not otherwise visited by the tree walk.
+    // First, remove any preceeding list nodes, which are not otherwise visited by the tree walk.
     //
-    // NOTE: GT_LIST nodes that are used as aggregates, by block ops, and by phi nodes will in fact be visited.
-    for (GenTree* prev = node->gtPrev;
-        prev != nullptr && prev->OperGet() == GT_LIST && !(prev->AsArgList()->IsAggregate());
-        prev = node->gtPrev)
+    // NOTE: GT_FIELD_LIST head nodes, and GT_LIST nodes used by phi nodes will in fact be visited.
+    for (GenTree* prev = node->gtPrev; prev != nullptr && prev->OperIsAnyList() && !(prev->OperIsFieldListHead());
+         prev          = node->gtPrev)
     {
         BlockRange().Remove(prev);
     }
 
     // In addition, remove the current node if it is a GT_LIST node that is not an aggregate.
-    if (node->OperGet() == GT_LIST)
+    if (node->OperIsAnyList())
     {
         GenTreeArgList* list = node->AsArgList();
-        if (!list->IsAggregate())
+        if (!list->OperIsFieldListHead())
         {
             BlockRange().Remove(list);
         }
@@ -739,6 +659,11 @@ Compiler::fgWalkResult Rationalizer::RewriteNode(GenTree** useEdge, ArrayStack<G
 
         case GT_ADDR:
             RewriteAddress(use);
+            break;
+
+        case GT_IND:
+            // Clear the `GTF_IND_ASG_LHS` flag, which overlaps with `GTF_IND_VSD_TGT`.
+            node->gtFlags &= ~GTF_IND_ASG_LHS;
             break;
 
         case GT_NOP:
@@ -931,6 +856,8 @@ Compiler::fgWalkResult Rationalizer::RewriteNode(GenTree** useEdge, ArrayStack<G
 #endif // FEATURE_SIMD
 
         default:
+            // JCC nodes should not be present in HIR.
+            assert(node->OperGet() != GT_JCC);
             break;
     }
 
@@ -943,7 +870,7 @@ Compiler::fgWalkResult Rationalizer::RewriteNode(GenTree** useEdge, ArrayStack<G
         BlockRange().Remove(node);
     }
 
-    assert(isLateArg == ((node->gtFlags & GTF_LATE_ARG) != 0));
+    assert(isLateArg == ((use.Def()->gtFlags & GTF_LATE_ARG) != 0));
 
     return Compiler::WALK_CONTINUE;
 }

@@ -24,6 +24,10 @@ void genLeaInstruction(GenTreeAddrMode* lea);
 
 void genSetRegToCond(regNumber dstReg, GenTreePtr tree);
 
+#if !defined(_TARGET_64BIT_)
+void genLongToIntCast(GenTreePtr treeNode);
+#endif
+
 void genIntToIntCast(GenTreePtr treeNode);
 
 void genFloatToFloatCast(GenTreePtr treeNode);
@@ -49,7 +53,6 @@ void genCompareInt(GenTreePtr treeNode);
 
 #if !defined(_TARGET_64BIT_)
 void genCompareLong(GenTreePtr treeNode);
-void genJTrueLong(GenTreePtr treeNode);
 #endif
 
 #ifdef FEATURE_SIMD
@@ -127,10 +130,9 @@ void genConsumeBlockDst(GenTreeBlk* blkNode);
 GenTree* genConsumeBlockSrc(GenTreeBlk* blkNode);
 void genConsumeBlockOp(GenTreeBlk* blkNode, regNumber dstReg, regNumber srcReg, regNumber sizeReg);
 
-#ifdef FEATURE_UNIX_AMD64_STRUCT_PASSING
-void genConsumePutStructArgStk(
-    GenTreePutArgStk* putArgStkNode, regNumber dstReg, regNumber srcReg, regNumber sizeReg, unsigned baseVarNum);
-#endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+#ifdef FEATURE_PUT_STRUCT_ARG_STK
+void genConsumePutStructArgStk(GenTreePutArgStk* putArgStkNode, regNumber dstReg, regNumber srcReg, regNumber sizeReg);
+#endif // FEATURE_PUT_STRUCT_ARG_STK
 
 void genConsumeRegs(GenTree* tree);
 
@@ -141,6 +143,10 @@ void genEmitGSCookieCheck(bool pushReg);
 void genSetRegToIcon(regNumber reg, ssize_t val, var_types type = TYP_INT, insFlags flags = INS_FLAGS_DONT_CARE);
 
 void genCodeForShift(GenTreePtr tree);
+
+#if defined(_TARGET_X86_)
+void genCodeForShiftLong(GenTreePtr tree);
+#endif
 
 #ifdef _TARGET_XARCH_
 void genCodeForShiftRMW(GenTreeStoreInd* storeInd);
@@ -154,12 +160,17 @@ void genCodeForCpBlkRepMovs(GenTreeBlk* cpBlkNode);
 
 void genCodeForCpBlkUnroll(GenTreeBlk* cpBlkNode);
 
-#ifdef FEATURE_UNIX_AMD64_STRUCT_PASSING
-void genPutStructArgStk(GenTreePtr treeNode, unsigned baseVarNum);
+#ifdef FEATURE_PUT_STRUCT_ARG_STK
+void genPutStructArgStk(GenTreePutArgStk* treeNode);
 
-void genStructPutArgRepMovs(GenTreePutArgStk* putArgStkNode, unsigned baseVarNum);
-void genStructPutArgUnroll(GenTreePutArgStk* putArgStkNode, unsigned baseVarNum);
-#endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+int genMove8IfNeeded(unsigned size, regNumber tmpReg, GenTree* srcAddr, unsigned offset);
+int genMove4IfNeeded(unsigned size, regNumber tmpReg, GenTree* srcAddr, unsigned offset);
+int genMove2IfNeeded(unsigned size, regNumber tmpReg, GenTree* srcAddr, unsigned offset);
+int genMove1IfNeeded(unsigned size, regNumber tmpReg, GenTree* srcAddr, unsigned offset);
+void genStructPutArgRepMovs(GenTreePutArgStk* putArgStkNode);
+void genStructPutArgUnroll(GenTreePutArgStk* putArgStkNode);
+void genStoreRegToStackArg(var_types type, regNumber reg, unsigned offset);
+#endif // FEATURE_PUT_STRUCT_ARG_STK
 
 void genCodeForLoadOffset(instruction ins, emitAttr size, regNumber dst, GenTree* base, unsigned offset);
 
@@ -211,6 +222,15 @@ bool genIsRegCandidateLocal(GenTreePtr tree)
     const LclVarDsc* varDsc = &compiler->lvaTable[tree->gtLclVarCommon.gtLclNum];
     return (varDsc->lvIsRegCandidate());
 }
+
+#ifdef FEATURE_PUT_STRUCT_ARG_STK
+#ifdef _TARGET_X86_
+bool m_pushStkArg;
+#else  // !_TARGET_X86_
+unsigned m_stkArgVarNum;
+#endif // !_TARGET_X86_
+unsigned m_stkArgOffset;
+#endif // !FEATURE_PUT_STRUCT_ARG_STK
 
 #ifdef DEBUG
 GenTree* lastConsumedNode;

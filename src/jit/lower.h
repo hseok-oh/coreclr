@@ -64,6 +64,7 @@ private:
     // Call Lowering
     // ------------------------------
     void LowerCall(GenTree* call);
+    void LowerCompare(GenTree* tree);
     void LowerJmpMethod(GenTree* jmp);
     void LowerRet(GenTree* ret);
     GenTree* LowerDelegateInvoke(GenTreeCall* call);
@@ -189,6 +190,7 @@ private:
     void TreeNodeInfoInitReturn(GenTree* tree);
     void TreeNodeInfoInitShiftRotate(GenTree* tree);
     void TreeNodeInfoInitCall(GenTreeCall* call);
+    void TreeNodeInfoInitCmp(GenTreePtr tree);
     void TreeNodeInfoInitStructArg(GenTreePtr structArg);
     void TreeNodeInfoInitBlockStore(GenTreeBlk* blkNode);
     void TreeNodeInfoInitLogicalOp(GenTree* tree);
@@ -201,9 +203,9 @@ private:
 #ifdef _TARGET_ARM64_
     void TreeNodeInfoInitPutArgStk(GenTree* argNode, fgArgTabEntryPtr info);
 #endif // _TARGET_ARM64_
-#ifdef FEATURE_UNIX_AMD64_STRUCT_PASSING
+#ifdef FEATURE_PUT_STRUCT_ARG_STK
     void TreeNodeInfoInitPutArgStk(GenTree* tree);
-#endif // FEATURE_UNIX_AMD64_STRUCT_PASSING
+#endif // FEATURE_PUT_STRUCT_ARG_STK
     void TreeNodeInfoInitLclHeap(GenTree* tree);
 
     void DumpNodeInfoMap();
@@ -224,8 +226,6 @@ private:
 #if defined(_TARGET_XARCH_)
     void SetMulOpCounts(GenTreePtr tree);
 #endif // defined(_TARGET_XARCH_)
-
-    void LowerCmp(GenTreePtr tree);
 
 #if !CPU_LOAD_STORE_ARCH
     bool IsBinOpInRMWStoreInd(GenTreePtr tree);

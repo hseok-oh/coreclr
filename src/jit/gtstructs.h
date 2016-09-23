@@ -65,7 +65,8 @@ GTSTRUCT_1(Cast        , GT_CAST)
 GTSTRUCT_1(Box         , GT_BOX)
 GTSTRUCT_1(Field       , GT_FIELD) 
 GTSTRUCT_1(Call        , GT_CALL) 
-GTSTRUCT_1(ArgList     , GT_LIST)
+GTSTRUCT_2(ArgList     , GT_LIST, GT_FIELD_LIST)
+GTSTRUCT_1(FieldList   , GT_FIELD_LIST)
 GTSTRUCT_1(Colon       , GT_COLON)
 GTSTRUCT_1(FptrVal     , GT_FTN_ADDR)
 GTSTRUCT_1(Intrinsic   , GT_INTRINSIC) 
@@ -100,6 +101,7 @@ GTSTRUCT_1(PhysReg     , GT_PHYSREG)
 GTSTRUCT_1(SIMD        , GT_SIMD) 
 #endif // FEATURE_SIMD
 GTSTRUCT_1(AllocObj    , GT_ALLOCOBJ)
+GTSTRUCT_1(JumpCC      , GT_JCC)
 /*****************************************************************************/
 #undef  GTSTRUCT_0
 #undef  GTSTRUCT_1

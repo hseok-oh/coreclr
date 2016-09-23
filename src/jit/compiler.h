@@ -1164,7 +1164,13 @@ struct fgArgTabEntry
     regNumber otherRegNum; // The (second) register to use when passing this argument.
 
     SYSTEMV_AMD64_CORINFO_STRUCT_REG_PASSING_DESCRIPTOR structDesc;
-#endif // defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
+#elif defined(_TARGET_X86_)
+    __declspec(property(get = getIsStruct)) bool isStruct;
+    bool getIsStruct()
+    {
+        return varTypeIsStruct(node);
+    }
+#endif // _TARGET_X86_
 
 #ifdef _TARGET_ARM_
     void SetIsHfaRegArg(bool hfaRegArg)
@@ -1292,6 +1298,10 @@ public:
     bool HasStackArgs()
     {
         return hasStackArgs;
+    }
+    bool AreArgsComplete() const
+    {
+        return argsComplete;
     }
 };
 
@@ -1939,8 +1949,6 @@ public:
     GenTreeArgList* gtNewArgList(GenTreePtr op1, GenTreePtr op2);
     GenTreeArgList* gtNewArgList(GenTreePtr op1, GenTreePtr op2, GenTreePtr op3);
 
-    GenTreeArgList* gtNewAggregate(GenTree* element);
-
     static fgArgTabEntryPtr gtArgEntryByArgNum(GenTreePtr call, unsigned argNum);
     static fgArgTabEntryPtr gtArgEntryByNode(GenTreePtr call, GenTreePtr node);
     fgArgTabEntryPtr gtArgEntryByLateArgIndex(GenTreePtr call, unsigned lateArgInx);
@@ -1997,7 +2005,7 @@ public:
 
     unsigned gtHashValue(GenTree* tree);
 
-    unsigned gtSetListOrder(GenTree* list, bool regs);
+    unsigned gtSetListOrder(GenTree* list, bool regs, bool isListCallArgs);
 
     void gtWalkOp(GenTree** op1, GenTree** op2, GenTree* adr, bool constOnly);
 
@@ -3845,7 +3853,7 @@ public:
     //
     var_types getReturnTypeForStruct(CORINFO_CLASS_HANDLE clsHnd,
                                      structPassingKind*   wbPassStruct = nullptr,
-                                     unsigned             structSize = 0);
+                                     unsigned             structSize   = 0);
 
 #ifdef DEBUG
     // Print a representation of "vnp" or "vn" on standard output.
@@ -4072,7 +4080,7 @@ public:
 
     void fgUnreachableBlock(BasicBlock* block);
 
-    void fgRemoveJTrue(BasicBlock* block);
+    void fgRemoveConditionalJump(BasicBlock* block);
 
     BasicBlock* fgLastBBInMainFunction();
 
@@ -4204,6 +4212,7 @@ public:
     void fgDebugCheckLinks(bool morphTrees = false);
     void fgDebugCheckNodeLinks(BasicBlock* block, GenTreePtr stmt);
     void fgDebugCheckFlags(GenTreePtr tree);
+    void fgDebugCheckFlagsHelper(GenTreePtr tree, unsigned treeFlags, unsigned chkFlags);
 #endif
 
 #ifdef LEGACY_BACKEND
@@ -4380,13 +4389,6 @@ private:
     GenTree* fgInsertCommaFormTemp(GenTree** ppTree, CORINFO_CLASS_HANDLE structType = nullptr);
     GenTree* fgMakeMultiUse(GenTree** ppTree);
 
-    //                  After replacing oldChild with newChild, fixup the fgArgTabEntryPtr
-    //                  if it happens to be an argument to a call.
-    void fgFixupIfCallArg(ArrayStack<GenTree*>* parentStack, GenTree* oldChild, GenTree* newChild);
-
-public:
-    void fgFixupArgTabEntryPtr(GenTreePtr parentCall, GenTreePtr oldArg, GenTreePtr newArg);
-
 private:
     //                  Recognize a bitwise rotation pattern and convert into a GT_ROL or a GT_ROR node.
     GenTreePtr fgRecognizeAndMorphBitwiseRotation(GenTreePtr tree);
@@ -4440,16 +4442,11 @@ private:
     // for sufficiently small offsets, we can rely on OS page protection to implicitly null-check addresses that we
     // know will be dereferenced.  To know that reliance on implicit null checking is sound, we must further know that
     // all offsets between the top-level indirection and the bottom are constant, and that their sum is sufficiently
-    // small; hence the other fields of MorphAddrContext.  Finally, the odd structure of GT_COPYBLK, in which the second
-    // argument is a GT_LIST, requires us to "tell" that List node that its parent is a GT_COPYBLK, so it "knows" that
-    // each of its arguments should be evaluated in MACK_Ind contexts.  (This would not be true for GT_LIST nodes
-    // representing method call argument lists.)
+    // small; hence the other fields of MorphAddrContext.
     enum MorphAddrContextKind
     {
         MACK_Ind,
         MACK_Addr,
-        MACK_CopyBlock, // This is necessary so we know we have to start a new "Ind" context for each of the
-                        // addresses in the arg list.
     };
     struct MorphAddrContext
     {
@@ -7650,8 +7647,6 @@ public:
 
 #ifdef DEBUG
 
-    static bool s_dspMemStats; // Display per-phase memory statistics for every function
-
     template <typename T>
     T dspPtr(T p)
     {
@@ -7759,8 +7754,8 @@ public:
     codeOptimize compCodeOpt()
     {
 #if 0
-        // Switching between size & speed has measurable throughput impact 
-        // (3.5% on NGen mscorlib when measured). It used to be enabled for 
+        // Switching between size & speed has measurable throughput impact
+        // (3.5% on NGen mscorlib when measured). It used to be enabled for
         // DEBUG, but should generate identical code between CHK & RET builds,
         // so that's not acceptable.
         // TODO-Throughput: Figure out what to do about size vs. speed & throughput.
@@ -7937,9 +7932,12 @@ public:
         // Such method's compRetNativeType is TYP_STRUCT without a hidden RetBufArg
         return varTypeIsStruct(info.compRetNativeType) && (info.compRetBuffArg == BAD_VAR_NUM);
 #endif // TARGET_XXX
+
 #else // not FEATURE_MULTIREG_RET
+
         // For this architecture there are no multireg returns
         return false;
+
 #endif // FEATURE_MULTIREG_RET
     }
 
@@ -8072,6 +8070,9 @@ public:
     ArenaAllocator* compGetAllocator();
 
 #if MEASURE_MEM_ALLOC
+
+    static bool s_dspMemStats; // Display per-phase memory statistics for every function
+
     struct MemStats
     {
         unsigned allocCnt;                 // # of allocs

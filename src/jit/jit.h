@@ -259,6 +259,15 @@ struct CLRConfig
 #define FEATURE_UNIX_AMD64_STRUCT_PASSING_ONLY(x)
 #endif // defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)
 
+#if defined(FEATURE_UNIX_AMD64_STRUCT_PASSING) || (defined(_TARGET_X86_) && !defined(LEGACY_BACKEND))
+#define FEATURE_PUT_STRUCT_ARG_STK 1
+#define PUT_STRUCT_ARG_STK_ONLY_ARG(x) , x
+#define PUT_STRUCT_ARG_STK_ONLY(x) x
+#else // !(defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)|| (defined(_TARGET_X86_) && !defined(LEGACY_BACKEND)))
+#define PUT_STRUCT_ARG_STK_ONLY_ARG(x)
+#define PUT_STRUCT_ARG_STK_ONLY(x)
+#endif // !(defined(FEATURE_UNIX_AMD64_STRUCT_PASSING)|| (defined(_TARGET_X86_) && !defined(LEGACY_BACKEND)))
+
 #if defined(UNIX_AMD64_ABI)
 #define UNIX_AMD64_ABI_ONLY_ARG(x) , x
 #define UNIX_AMD64_ABI_ONLY(x) x
@@ -465,6 +474,8 @@ typedef ptrdiff_t ssize_t;
 #define MEASURE_NODE_SIZE 0   // Collect stats about GenTree node allocations.
 #define MEASURE_PTRTAB_SIZE 0 // Collect stats about GC pointer table allocations.
 #define EMITTER_STATS 0       // Collect stats on the emitter.
+#define NODEBASH_STATS 0      // Collect stats on changed gtOper values in GenTree's.
+#define COUNT_AST_OPERS 0     // Display use counts for GenTree operators.
 
 #define VERBOSE_SIZES 0  // Always display GC info sizes. If set, DISPLAY_SIZES must also be set.
 #define VERBOSE_VERIFY 0 // Dump additional information when verifying code. Useful to debug verification bugs.
@@ -687,7 +698,7 @@ inline size_t unsigned_abs(ssize_t x)
 
 /*****************************************************************************/
 
-#if CALL_ARG_STATS || COUNT_BASIC_BLOCKS || COUNT_LOOPS || EMITTER_STATS || MEASURE_NODE_SIZE
+#if CALL_ARG_STATS || COUNT_BASIC_BLOCKS || COUNT_LOOPS || EMITTER_STATS || MEASURE_NODE_SIZE || MEASURE_MEM_ALLOC
 
 class Histogram
 {

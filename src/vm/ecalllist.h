@@ -1165,9 +1165,9 @@ FCFuncStart(gAssemblyNameFuncs)
     FCFuncElement("nGetPublicKeyToken", AssemblyNameNative::GetPublicKeyToken)
 #ifndef FEATURE_CORECLR
     FCFuncElement("EscapeCodeBase", AssemblyNameNative::EscapeCodeBase)
+#endif // !FEATURE_CORECLR
     FCFuncElement("ReferenceMatchesDefinitionInternal", AssemblyNameNative::ReferenceMatchesDefinition)
     FCFuncElement("nGetFileInformation", AssemblyNameNative::GetFileInformation)
-#endif // !FEATURE_CORECLR 
 FCFuncEnd()
 
 FCFuncStart(gLoaderAllocatorFuncs)
@@ -1829,8 +1829,8 @@ FCFuncStart(gCompilerFuncs)
     FCFuncElement("GetObjectValue", ObjectNative::GetObjectValue)
     FCIntrinsic("InitializeArray", ArrayNative::InitializeArray, CORINFO_INTRINSIC_InitializeArray)
     FCFuncElement("_RunClassConstructor", ReflectionInvocation::RunClassConstructor)
-#ifndef FEATURE_CORECLR
     FCFuncElement("_RunModuleConstructor", ReflectionInvocation::RunModuleConstructor)
+#ifndef FEATURE_CORECLR
     FCFuncElement("_PrepareMethod", ReflectionInvocation::PrepareMethod)
 #endif // !FEATURE_CORECLR
     QCFuncElement("_CompileMethod", ReflectionInvocation::CompileMethod)

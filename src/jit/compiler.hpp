@@ -870,6 +870,10 @@ inline GenTree::GenTree(genTreeOps oper, var_types type DEBUGARG(bool largeNode)
 #endif
 #endif
 
+#if COUNT_AST_OPERS
+    InterlockedIncrement(&s_gtNodeCounts[oper]);
+#endif
+
 #ifdef DEBUG
     gtSeqNum = 0;
     gtTreeID = JitTls::GetCompiler()->compGenTreeID++;
@@ -1285,11 +1289,11 @@ inline void GenTree::SetOper(genTreeOps oper, ValueNumberUpdate vnUpdate)
 
     assert(GenTree::s_gtNodeSizes[gtOper] == TREE_NODE_SZ_SMALL ||
            GenTree::s_gtNodeSizes[gtOper] == TREE_NODE_SZ_LARGE);
-    assert(GenTree::s_gtNodeSizes[oper] == TREE_NODE_SZ_SMALL || GenTree::s_gtNodeSizes[oper] == TREE_NODE_SZ_LARGE);
 
+    assert(GenTree::s_gtNodeSizes[oper] == TREE_NODE_SZ_SMALL || GenTree::s_gtNodeSizes[oper] == TREE_NODE_SZ_LARGE);
     assert(GenTree::s_gtNodeSizes[oper] == TREE_NODE_SZ_SMALL || (gtDebugFlags & GTF_DEBUG_NODE_LARGE));
 
-    gtOper = oper;
+    SetOperRaw(oper);
 
 #ifdef DEBUG
     // Maintain the invariant that unary operators always have NULL gtOp2.
@@ -1327,6 +1331,9 @@ inline void GenTree::CopyFrom(const GenTree* src, Compiler* comp)
     assert((gtDebugFlags & GTF_DEBUG_NODE_LARGE) || GenTree::s_gtNodeSizes[src->gtOper] == TREE_NODE_SZ_SMALL);
     GenTreePtr prev = gtPrev;
     GenTreePtr next = gtNext;
+
+    RecordOperBashing(OperGet(), src->OperGet()); // nop unless NODEBASH_STATS is enabled
+
     // The VTable pointer is copied intentionally here
     memcpy((void*)this, (void*)src, src->GetNodeSize());
     this->gtPrev = prev;
@@ -1373,7 +1380,7 @@ inline void GenTree::InitNodeSize()
 
 inline void GenTree::SetOper(genTreeOps oper, ValueNumberUpdate vnUpdate)
 {
-    gtOper = oper;
+    SetOperRaw(oper);
 
     if (vnUpdate == CLEAR_VN)
     {
@@ -1384,6 +1391,7 @@ inline void GenTree::SetOper(genTreeOps oper, ValueNumberUpdate vnUpdate)
 
 inline void GenTree::CopyFrom(GenTreePtr src)
 {
+    RecordOperBashing(OperGet(), src->OperGet()); // nop unless NODEBASH_STATS is enabled
     *this    = *src;
 #ifdef DEBUG
     gtSeqNum = 0;
@@ -1404,6 +1412,16 @@ inline GenTreePtr Compiler::gtNewCastNodeL(var_types typ, GenTreePtr op1, var_ty
 /*****************************************************************************/
 #endif // SMALL_TREE_NODES
 /*****************************************************************************/
+
+/*****************************************************************************/
+
+inline void GenTree::SetOperRaw(genTreeOps oper)
+{
+    // Please do not do anything here other than assign to gtOper (debug-only
+    // code is OK, but should be kept to a minimum).
+    RecordOperBashing(OperGet(), oper); // nop unless NODEBASH_STATS is enabled
+    gtOper = oper;
+}
 
 inline void GenTree::SetOperResetFlags(genTreeOps oper)
 {
@@ -1446,7 +1464,7 @@ inline void GenTree::ChangeOper(genTreeOps oper, ValueNumberUpdate vnUpdate)
 
 inline void GenTree::ChangeOperUnchecked(genTreeOps oper)
 {
-    gtOper = oper; // Trust the caller and don't use SetOper()
+    SetOperRaw(oper); // Trust the caller and don't use SetOper()
     gtFlags &= GTF_COMMON_MASK;
 }
 
@@ -1579,7 +1597,7 @@ inline unsigned Compiler::lvaGrabTemp(bool shortLifetime DEBUGARG(const char* re
 
 #if 0
         // TODO-Cleanup: Enable this and test.
-#ifdef DEBUG   
+#ifdef DEBUG
         // Fill the old table with junks. So to detect the un-intended use.
         memset(lvaTable, fDefaultFill2.val_DontUse_(CLRConfig::INTERNAL_JitDefaultFill, 0xFF), lvaCount * sizeof(*lvaTable));
 #endif
@@ -1655,7 +1673,7 @@ inline unsigned Compiler::lvaGrabTemps(unsigned cnt DEBUGARG(const char* reason)
         }
 
 #if 0
-#ifdef DEBUG   
+#ifdef DEBUG
         // TODO-Cleanup: Enable this and test.
         // Fill the old table with junks. So to detect the un-intended use.
         memset(lvaTable, fDefaultFill2.val_DontUse_(CLRConfig::INTERNAL_JitDefaultFill, 0xFF), lvaCount * sizeof(*lvaTable));
@@ -4367,8 +4385,10 @@ inline bool Compiler::lvaIsGCTracked(const LclVarDsc* varDsc)
 inline void Compiler::EndPhase(Phases phase)
 {
 #if defined(FEATURE_JIT_METHOD_PERF)
-    if (pCompJitTimer != NULL)
+    if (pCompJitTimer != nullptr)
+    {
         pCompJitTimer->EndPhase(phase);
+    }
 #endif
 #if DUMP_FLOWGRAPHS
     fgDumpFlowGraph(phase);

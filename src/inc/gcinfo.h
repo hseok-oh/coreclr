@@ -32,15 +32,21 @@ const unsigned   this_OFFSET_FLAG  = 0x2;  // the offset is "this"
 // The current GCInfo Version
 //-----------------------------------------------------------------------------
 
-#ifdef _TARGET_X86_
-// X86 GcInfo encoding is yet to be changed.
-#define GCINFO_VERSION 1
-#else
 #define GCINFO_VERSION 2
-#endif // _TARGET_X86_
 
 #define MIN_GCINFO_VERSION_WITH_RETURN_KIND 2
 #define MIN_GCINFO_VERSION_WITH_REV_PINVOKE_FRAME 2
+
+inline BOOL GCInfoEncodesReturnKind(UINT32 version=GCINFO_VERSION)
+{
+    return version >= MIN_GCINFO_VERSION_WITH_RETURN_KIND;
+}
+
+inline BOOL GCInfoEncodesRevPInvokeFrame(UINT32 version=GCINFO_VERSION)
+{
+    return version >= MIN_GCINFO_VERSION_WITH_REV_PINVOKE_FRAME;
+}
+
 //-----------------------------------------------------------------------------
 // GCInfoToken: A wrapper that contains the GcInfo data and version number.
 //
@@ -62,11 +68,11 @@ struct GCInfoToken
 
     BOOL IsReturnKindAvailable() 
     {
-        return (Version >= MIN_GCINFO_VERSION_WITH_RETURN_KIND);
+        return GCInfoEncodesReturnKind(Version);
     }
     BOOL IsReversePInvokeFrameAvailable() 
     {
-        return (Version >= MIN_GCINFO_VERSION_WITH_REV_PINVOKE_FRAME);
+        return GCInfoEncodesRevPInvokeFrame(Version);
     }
 
     static UINT32 ReadyToRunVersionToGcInfoVersion(UINT32 readyToRunMajorVersion)

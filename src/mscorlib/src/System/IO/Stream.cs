@@ -176,9 +176,10 @@ namespace System.IO {
             Contract.Requires(destination.CanWrite);
 
             byte[] buffer = new byte[bufferSize];
-            int bytesRead;
-            while ((bytesRead = await ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) != 0)
+            while (true)
             {
+                int bytesRead = await ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                if (bytesRead == 0) break;
                 await destination.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -860,13 +861,18 @@ namespace System.IO {
                 throw new ArgumentNullException("destination");
             if (bufferSize <= 0)
                 throw new ArgumentOutOfRangeException("bufferSize", Environment.GetResourceString("ArgumentOutOfRange_NeedPosNum"));
-            if (!CanRead && !CanWrite)
+
+            // Cache some virtual method calls for better perf
+            bool canRead = CanRead;
+            bool destCanWrite = destination.CanWrite;
+
+            if (!canRead && !CanWrite)
                 throw new ObjectDisposedException(null, Environment.GetResourceString("ObjectDisposed_StreamClosed"));
-            if (!destination.CanRead && !destination.CanWrite)
+            if (!destination.CanRead && !destCanWrite)
                 throw new ObjectDisposedException("destination", Environment.GetResourceString("ObjectDisposed_StreamClosed"));
-            if (!CanRead)
+            if (!canRead)
                 throw new NotSupportedException(Environment.GetResourceString("NotSupported_UnreadableStream"));
-            if (!destination.CanWrite)
+            if (!destCanWrite)
                 throw new NotSupportedException(Environment.GetResourceString("NotSupported_UnwritableStream"));
             Contract.EndContractBlock();
         }

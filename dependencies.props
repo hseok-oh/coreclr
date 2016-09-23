@@ -1,21 +1,21 @@
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!-- Source of truth for dependency tooling: the commit hash of the dotnet/versions master branch as of the last auto-upgrade. -->
   <PropertyGroup>
-    <CoreFxCurrentRef>2e3cca76502a1514e9cdc566df216a1afbf07872</CoreFxCurrentRef>
-    <CoreClrCurrentRef>2e3cca76502a1514e9cdc566df216a1afbf07872</CoreClrCurrentRef>
-    <ExternalCurrentRef>2e3cca76502a1514e9cdc566df216a1afbf07872</ExternalCurrentRef>
+    <CoreFxCurrentRef>45719adc483ca8b4e0b12dcc510196e24d2e37e8</CoreFxCurrentRef>
+    <CoreClrCurrentRef>45719adc483ca8b4e0b12dcc510196e24d2e37e8</CoreClrCurrentRef>
+    <ExternalCurrentRef>45719adc483ca8b4e0b12dcc510196e24d2e37e8</ExternalCurrentRef>
   </PropertyGroup>
 
   <!-- Auto-upgraded properties for each build info dependency. -->
   <PropertyGroup>
-    <CoreFxExpectedPrerelease>beta-24431-01</CoreFxExpectedPrerelease>
-    <ExternalExpectedPrerelease>beta-24430-00</ExternalExpectedPrerelease>
+    <CoreFxExpectedPrerelease>beta-24514-06</CoreFxExpectedPrerelease>
+    <ExternalExpectedPrerelease>beta-24514-00</ExternalExpectedPrerelease>
   </PropertyGroup>
 
   <!-- Full package version strings that are used in other parts of the build. -->
   <PropertyGroup>
-    <CoreClrPackageVersion>1.1.0-beta-24431-01</CoreClrPackageVersion>
-    <XunitPackageVersion>2.1.0</XunitPackageVersion>
+    <CoreClrPackageVersion>1.1.0-beta-24515-02</CoreClrPackageVersion>
+    <XunitPackageVersion>2.2.0-beta2-build3300</XunitPackageVersion>
   </PropertyGroup>
 
   <!-- Package dependency verification/auto-upgrade configuration. -->
@@ -72,6 +72,7 @@
       <Version>$(XunitPackageVersion)</Version>
     </StaticDependency>
 
+    <XunitPerformanceDependency Include="Microsoft.DotNet.xunit.performance" />
     <XunitPerformanceDependency Include="Microsoft.DotNet.xunit.performance.analysis" />
     <XunitPerformanceDependency Include="Microsoft.DotNet.xunit.performance.analysis.cli" />
     <XunitPerformanceDependency Include="Microsoft.DotNet.xunit.performance.metrics" />
@@ -79,11 +80,11 @@
     <XunitPerformanceDependency Include="Microsoft.DotNet.xunit.performance.runner.cli" />
     <XunitPerformanceDependency Include="Microsoft.DotNet.xunit.performance.runner.Windows" />
     <StaticDependency Include="@(XunitPerformanceDependency)">
-      <Version>1.0.0-alpha-build0035</Version>
+      <Version>1.0.0-alpha-build0040</Version>
     </StaticDependency>
 
     <StaticDependency Include="xunit.console.netcore">
-      <Version>1.0.2-prerelease-00101</Version>
+      <Version>1.0.2-prerelease-00177</Version>
     </StaticDependency>
 
     <DependencyBuildInfo Include="@(StaticDependency)">

@@ -1113,7 +1113,7 @@ void Compiler::fgExtendDbgLifetimes()
                 // Create initialization node
                 if (!block->IsLIR())
                 {
-                    GenTree* varNode = gtNewLclvNode(varNum, type);
+                    GenTree* varNode  = gtNewLclvNode(varNum, type);
                     GenTree* initNode = gtNewAssignNode(varNode, zero);
 
                     // Create a statement for the initializer, sequence it, and append it to the current BB.
@@ -1124,7 +1124,8 @@ void Compiler::fgExtendDbgLifetimes()
                 }
                 else
                 {
-                    GenTree* store = new (this, GT_STORE_LCL_VAR) GenTreeLclVar(GT_STORE_LCL_VAR, type, varNum, BAD_IL_OFFSET);
+                    GenTree* store =
+                        new (this, GT_STORE_LCL_VAR) GenTreeLclVar(GT_STORE_LCL_VAR, type, varNum, BAD_IL_OFFSET);
                     store->gtOp.gtOp1 = zero;
                     store->gtFlags |= (GTF_VAR_DEF | GTF_ASG);
 
@@ -1133,7 +1134,7 @@ void Compiler::fgExtendDbgLifetimes()
 
 #if !defined(_TARGET_64BIT_) && !defined(LEGACY_BACKEND)
                     DecomposeLongs::DecomposeRange(this, blockWeight, initRange);
-#endif
+#endif // !defined(_TARGET_64BIT_) && !defined(LEGACY_BACKEND)
 
                     // Naively inserting the initializer at the end of the block may add code after the block's
                     // terminator, in which case the inserted code will never be executed (and the IR for the
@@ -2548,10 +2549,10 @@ bool Compiler::fgRemoveDeadStore(
             switch (asgNode->gtOper)
             {
                 case GT_ASG_ADD:
-                    asgNode->gtOper = GT_ADD;
+                    asgNode->SetOperRaw(GT_ADD);
                     break;
                 case GT_ASG_SUB:
-                    asgNode->gtOper = GT_SUB;
+                    asgNode->SetOperRaw(GT_SUB);
                     break;
                 default:
                     // Only add and sub allowed, we don't have ASG_MUL and ASG_DIV for ints, and

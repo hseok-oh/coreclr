@@ -80,7 +80,7 @@ void SetupAndSprinkleBreakpoints(
 
     gcCover->methodRegion      = methodRegionInfo;
     gcCover->codeMan           = pCodeInfo->GetCodeManager();
-    gcCover->gcInfoToken           = pCodeInfo->GetGCInfoToken();
+    gcCover->gcInfoToken       = pCodeInfo->GetGCInfoToken();
     gcCover->callerThread      = 0;
     gcCover->doingEpilogChecks = true;    
 
@@ -583,7 +583,7 @@ void GCCoverageInfo::SprinkleBreakpoints(
 #ifdef _TARGET_X86_
         // we will whack every instruction in the prolog and epilog to make certain
         // our unwinding logic works there.  
-        if (codeMan->IsInPrologOrEpilog((cur - codeStart) + (DWORD)regionOffsetAdj, gcInfoToken.Info, NULL)) {
+        if (codeMan->IsInPrologOrEpilog((cur - codeStart) + (DWORD)regionOffsetAdj, gcInfoToken, NULL)) {
             *cur = INTERRUPT_INSTR;
         }
 #endif
@@ -1234,8 +1234,8 @@ void checkAndUpdateReg(DWORD& origVal, DWORD curVal, bool gcHappened) {
     // the validation infrastructure has got a bug.
 
     _ASSERTE(gcHappened);    // If the register values are different, a GC must have happened
-    _ASSERTE(GCHeap::GetGCHeap()->IsHeapPointer((BYTE*) size_t(origVal)));    // And the pointers involved are on the GCHeap
-    _ASSERTE(GCHeap::GetGCHeap()->IsHeapPointer((BYTE*) size_t(curVal)));
+    _ASSERTE(GCHeapUtilities::GetGCHeap()->IsHeapPointer((BYTE*) size_t(origVal)));    // And the pointers involved are on the GCHeap
+    _ASSERTE(GCHeapUtilities::GetGCHeap()->IsHeapPointer((BYTE*) size_t(curVal)));
     origVal = curVal;       // this is now the best estimate of what should be returned. 
 }
 
@@ -1478,7 +1478,7 @@ void DoGcStress (PCONTEXT regs, MethodDesc *pMD)
             if (gcCover->callerThread == 0) {
                 if (FastInterlockCompareExchangePointer(&gcCover->callerThread, pThread, 0) == 0) {
                     gcCover->callerRegs = *regs;
-                    gcCover->gcCount = GCHeap::GetGCHeap()->GetGcCount();
+                    gcCover->gcCount = GCHeapUtilities::GetGCHeap()->GetGcCount();
                     bShouldUpdateProlog = false;
                 }
             }    
@@ -1527,7 +1527,7 @@ void DoGcStress (PCONTEXT regs, MethodDesc *pMD)
     /* are we in a prolog or epilog?  If so just test the unwind logic
        but don't actually do a GC since the prolog and epilog are not
        GC safe points */
-    if (gcCover->codeMan->IsInPrologOrEpilog(offset, gcCover->gcInfoToken.Info, NULL))
+    if (gcCover->codeMan->IsInPrologOrEpilog(offset, gcCover->gcInfoToken, NULL))
     {
         // We are not at a GC safe point so we can't Suspend EE (Suspend EE will yield to GC).
         // But we still have to update the GC Stress instruction. We do it directly without suspending
@@ -1564,13 +1564,13 @@ void DoGcStress (PCONTEXT regs, MethodDesc *pMD)
             // instruction in the epilog  (TODO: fix it for the first instr Case)
             
             _ASSERTE(pThread->PreemptiveGCDisabled());    // Epilogs should be in cooperative mode, no GC can happen right now. 
-            bool gcHappened = gcCover->gcCount != GCHeap::GetGCHeap()->GetGcCount();
+            bool gcHappened = gcCover->gcCount != GCHeapUtilities::GetGCHeap()->GetGcCount();
             checkAndUpdateReg(gcCover->callerRegs.Edi, *regDisp.pEdi, gcHappened);
             checkAndUpdateReg(gcCover->callerRegs.Esi, *regDisp.pEsi, gcHappened);
             checkAndUpdateReg(gcCover->callerRegs.Ebx, *regDisp.pEbx, gcHappened);
             checkAndUpdateReg(gcCover->callerRegs.Ebp, *regDisp.pEbp, gcHappened);
             
-            gcCover->gcCount = GCHeap::GetGCHeap()->GetGcCount();
+            gcCover->gcCount = GCHeapUtilities::GetGCHeap()->GetGcCount();
 
         }        
         return;
@@ -1777,7 +1777,7 @@ void DoGcStress (PCONTEXT regs, MethodDesc *pMD)
     // Do the actual stress work
     //
 
-    if (!GCHeap::GetGCHeap()->StressHeap())
+    if (!GCHeapUtilities::GetGCHeap()->StressHeap())
         UpdateGCStressInstructionWithoutGC ();
 
     // Must flush instruction cache before returning as instruction has been modified.

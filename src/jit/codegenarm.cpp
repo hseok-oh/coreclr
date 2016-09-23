@@ -849,7 +849,8 @@ void CodeGen::genCodeForBBlist()
     if (compiler->verbose)
     {
         printf("\n# ");
-        printf("compCycleEstimate = %6d, compSizeEstimate = %5d ", compiler->compCycleEstimate, compiler->compSizeEstimate);
+        printf("compCycleEstimate = %6d, compSizeEstimate = %5d ", compiler->compCycleEstimate,
+               compiler->compSizeEstimate);
         printf("%s\n", compiler->info.compFullName);
     }
 #endif
@@ -1423,6 +1424,7 @@ void CodeGen::genCodeForTreeNode(GenTreePtr treeNode)
             break;
 
         case GT_LIST:
+        case GT_FIELD_LIST:
         case GT_ARGPLACE:
             // Nothing to do
             break;

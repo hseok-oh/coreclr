@@ -719,9 +719,7 @@ namespace System.Collections.Generic {
                         Array.Copy(_items, index+count, _items, index*2, _size-index);
                     }
                     else {
-                        T[] itemsToInsert = new T[count];
-                        c.CopyTo(itemsToInsert, 0);
-                        itemsToInsert.CopyTo(_items, index);                    
+                        c.CopyTo(_items, index);
                     }
                     _size += count;
                 }                
@@ -930,22 +928,7 @@ namespace System.Collections.Generic {
                 ThrowHelper.ThrowArgumentException(ExceptionResource.Argument_InvalidOffLen);
             Contract.EndContractBlock();
 
-            // The non-generic Array.Reverse is not used because it does not perform
-            // well for non-primitive value types.
-            // If/when a generic Array.Reverse<T> becomes available, the below code
-            // can be deleted and replaced with a call to Array.Reverse<T>.
-            int i = index;
-            int j = index + count - 1;
-            T[] array = _items;
-            while (i < j)
-            {
-                T temp = array[i];
-                array[i] = array[j];
-                array[j] = temp;
-                i++;
-                j--;
-            }
-
+            Array.Reverse(_items, index, count);
             _version++;
         }
         

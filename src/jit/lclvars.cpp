@@ -1448,12 +1448,16 @@ void Compiler::lvaCanPromoteStructType(CORINFO_CLASS_HANDLE    typeHnd,
 
 #if 1 // TODO-Cleanup: Consider removing this entire #if block in the future
 
-        // This method has two callers. The one in Importer.cpp passes sortFields == false
-        // and the other passes sortFields == true.
-        // This is a workaround that leave the inlining behavior the same and before while still
-        // performing extra struct promotions when compiling the method.
-        //
+// This method has two callers. The one in Importer.cpp passes sortFields == false
+// and the other passes sortFields == true.
+// This is a workaround that leaves the inlining behavior the same as before while still
+// performing extra struct promotions when compiling the method.
+//
+// The x86 legacy back-end can't handle the more general RyuJIT struct promotion (notably structs
+// with holes), in genPushArgList(), so in that case always check for custom layout.
+#if FEATURE_FIXED_OUT_ARGS || !defined(LEGACY_BACKEND)
         if (!sortFields) // the condition "!sortFields" really means "we are inlining"
+#endif
         {
             treatAsOverlapping = StructHasCustomLayout(typeFlags);
         }
@@ -1736,7 +1740,7 @@ void Compiler::lvaPromoteStructVar(unsigned lclNum, lvaStructPromotionInfo* Stru
     }
 }
 
-#if !defined(_TARGET_64BIT_)
+#if !defined(LEGACY_BACKEND) && !defined(_TARGET_64BIT_)
 //------------------------------------------------------------------------
 // lvaPromoteLongVars: "Struct promote" all register candidate longs as if they are structs of two ints.
 //
@@ -1758,21 +1762,9 @@ void Compiler::lvaPromoteLongVars()
     {
         LclVarDsc* varDsc = &lvaTable[lclNum];
         if (!varTypeIsLong(varDsc) || varDsc->lvDoNotEnregister || varDsc->lvIsMultiRegArgOrRet() ||
-            (varDsc->lvRefCnt == 0))
+            (varDsc->lvRefCnt == 0) || varDsc->lvIsStructField)
         {
             continue;
-        }
-
-        // Will this work ???
-        // We can't have nested promoted structs.
-        if (varDsc->lvIsStructField)
-        {
-            if (lvaGetPromotionType(varDsc->lvParentLcl) != PROMOTION_TYPE_INDEPENDENT)
-            {
-                continue;
-            }
-            varDsc->lvIsStructField = false;
-            varDsc->lvTracked       = false;
         }
 
         varDsc->lvFieldCnt      = 2;
@@ -1823,7 +1815,7 @@ void Compiler::lvaPromoteLongVars()
     }
 #endif // DEBUG
 }
-#endif // !_TARGET_64BIT_
+#endif // !defined(LEGACY_BACKEND) && !defined(_TARGET_64BIT_)
 
 /*****************************************************************************
  * Given a fldOffset in a promoted struct var, return the index of the local
@@ -4453,7 +4445,9 @@ int Compiler::lvaAssignVirtualFrameOffsetToArg(unsigned lclNum,
     noway_assert(argSize);
 
     if (Target::g_tgtArgOrder == Target::ARG_ORDER_L2R)
+    {
         argOffs -= argSize;
+    }
 
     unsigned fieldVarNum = BAD_VAR_NUM;
 
@@ -4543,7 +4537,9 @@ int Compiler::lvaAssignVirtualFrameOffsetToArg(unsigned lclNum,
     }
 
     if (Target::g_tgtArgOrder == Target::ARG_ORDER_R2L && !varDsc->lvIsRegArg)
+    {
         argOffs += argSize;
+    }
 
     return argOffs;
 }
@@ -5278,7 +5274,9 @@ void Compiler::lvaAssignVirtualFrameOffsetsToLocals()
                 //  a local variable which will need stack frame space.
                 //
                 if (!varDsc->lvIsRegArg)
+                {
                     continue;
+                }
 
 #ifdef _TARGET_ARM64_
                 if (info.compIsVarArgs)

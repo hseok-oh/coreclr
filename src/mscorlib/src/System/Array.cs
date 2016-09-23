@@ -1614,7 +1614,41 @@ namespace System {
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [ReliabilityContract(Consistency.MayCorruptInstance, Cer.MayFail)]
         private static extern bool TrySZReverse(Array array, int index, int count);
-        
+
+        [ReliabilityContract(Consistency.MayCorruptInstance, Cer.MayFail)]
+        public static void Reverse<T>(T[] array)
+        {
+            if (array == null)
+                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.array);
+            Contract.EndContractBlock();
+            Reverse(array, 0, array.Length);
+        }
+
+        [ReliabilityContract(Consistency.MayCorruptInstance, Cer.MayFail)]
+        public static void Reverse<T>(T[] array, int index, int length)
+        {
+            if (array == null)
+                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.array);
+            if (index < 0)
+                ThrowHelper.ThrowIndexArgumentOutOfRange_NeedNonNegNumException();
+            if (length < 0)
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.length, ExceptionResource.ArgumentOutOfRange_NeedNonNegNum);
+            if (array.Length - index < length)
+                ThrowHelper.ThrowArgumentException(ExceptionResource.Argument_InvalidOffLen);
+            Contract.EndContractBlock();
+
+            int i = index;
+            int j = index + length - 1;
+            while (i < j)
+            {
+                T temp = array[i];
+                array[i] = array[j];
+                array[j] = temp;
+                i++;
+                j--;
+            }
+        }
+
         // Sorts the elements of an array. The sort compares the elements to each
         // other using the IComparable interface, which must be implemented
         // by all elements of the array.
@@ -1953,6 +1987,7 @@ namespace System {
 #endif
             }
 
+#if !FEATURE_CORECLR
             private void DepthLimitedQuickSort(int left, int right, int depthLimit)
             {
                 // Can use the much faster jit helpers for array access.
@@ -2050,6 +2085,7 @@ namespace System {
                     }
                 } while (left < right);
             }
+#endif
 
             private void IntrospectiveSort(int left, int length)
             {
@@ -2272,6 +2308,7 @@ namespace System {
 #endif
             }
 
+#if !FEATURE_CORECLR
             private void DepthLimitedQuickSort(int left, int right, int depthLimit)
             {
                 // Must use slow Array accessors (GetValue & SetValue)
@@ -2367,6 +2404,7 @@ namespace System {
                     }
                 } while (left < right);
             }
+#endif
 
             private void IntrospectiveSort(int left, int length)
             {
