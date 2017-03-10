@@ -19,6 +19,8 @@
 
 class ZapWriter;
 class ZapHeap;
+    
+static int vNoSectionID = 0;
 
 // This is maximum size of anything in the image written by ZapWriter. Used for overflow checking.
 #define ZAPWRITER_MAX_SIZE 0x3FFFFFFF
@@ -146,9 +148,12 @@ class ZapVirtualSection : public ZapNode
     ZapVirtualSection(DWORD dwAlignment)
         : m_dwAlignment(dwAlignment)
     {
+        vSectionID = vNoSectionID;
+        vNoSectionID++;
     }
 
 public:
+    int vSectionID;
     virtual DWORD GetSize()
     {
         return m_dwSize;
@@ -183,6 +188,9 @@ public:
         _ASSERTE(!pNode->IsPlaced());
         m_Nodes.Append(pNode);
         pNode->SetRVA((DWORD)-1);
+        if (vSectionID == 0) {
+            printf("Type: %d size: %d\n", pNode->GetType(), pNode->GetSize());
+        }
     }
 
     COUNT_T GetNodeCount()

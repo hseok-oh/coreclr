@@ -2622,6 +2622,7 @@ void ZapInfo::recordRelocation(void *location, void *target,
     }
 
     m_CodeRelocations.Append(r);
+    //printf("[code relocation] location offset: %d target offset: %d type: %d \n", r.m_offset, targetOffset, fRelocType);
 }
 
 WORD ZapInfo::getRelocTypeHint(void * target)

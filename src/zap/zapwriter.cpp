@@ -124,9 +124,9 @@ void ZapWriter::ComputeRVAs()
 
         DWORD dwEndOfRawData = dwPos;
 
-#ifdef REDHAWK
+//#ifdef REDHAWK
         printf("Physical Section \"%s\" {\n", pPhysicalSection->m_pszName);
-#endif // REDHAWK
+//#endif // REDHAWK
 
         for (COUNT_T iVirtualSection = 0; iVirtualSection < pPhysicalSection->m_Sections.GetCount(); iVirtualSection++)
         {
@@ -156,12 +156,12 @@ void ZapWriter::ComputeRVAs()
 
             if (iVirtualSection < pPhysicalSection->m_Sections.GetCount() - pPhysicalSection->m_nBssSections)
                 dwEndOfRawData = dwPos;
-#ifdef REDHAWK
+//#ifdef REDHAWK
             if (pVirtualSection->m_dwSize > 0)
             {
-                printf("    %08x (%6u bytes): %s\n", pVirtualSection->GetRVA(), pVirtualSection->m_dwSize, pVirtualSection->m_pszTag);
+                printf("    %08x (%8u bytes): %d, %d\n", pVirtualSection->GetRVA(), pVirtualSection->m_dwSize, /*pVirtualSection->m_pszTag*/iVirtualSection, pVirtualSection->vSectionID);
             }
-#endif // REDHAWK
+//#endif // REDHAWK
         }
 
         pPhysicalSection->m_dwSize = dwPos - pPhysicalSection->GetRVA();
@@ -170,10 +170,10 @@ void ZapWriter::ComputeRVAs()
 
         dwFilePos += pPhysicalSection->m_dwSizeOfRawData;
 
-#ifdef REDHAWK
+//#ifdef REDHAWK
         printf("    %08x: end\n", dwPos);
         printf("}\n");
-#endif // REDHAWK
+//#endif // REDHAWK
     }
 }
 

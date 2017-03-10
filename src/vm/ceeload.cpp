@@ -8589,6 +8589,129 @@ void Module::Save(DataImage *image)
     //
     // Save the module
     //
+#if defined(CROSS_COMPILE) && defined(__linux__) && defined(_TARGET_ARM_)
+    struct T_Module {
+        void* vTable_Module;
+
+        void* m_pSimpleName;
+        void* m_file;
+        void* m_pDllMain;
+
+        DWORD m_dwTransientFlags;
+        DWORD m_dwPersistedFlags;
+
+        void* m_pVASigCookieBlock;
+
+        void* m_pAssembly;
+        mdFile m_moduleRef;
+
+        // CrstExplicitInit has different size on different architecture
+        // linux/arm:152 linux/x86:148
+        UINT8 m_Crst[152];
+        UINT8 m_FixupCrst[152];
+
+        void* m_pISymUnmanagedReader;
+        UINT8 m_ISymUnmanagedReaderCrst[152];
+        void* m_pIStreamSym;
+
+        ESymbolFormat m_symbolFormat;
+        ArrayList m_activeDependencies;
+
+        SynchronizedBitMask m_unconditionalDependencies;
+        ULONG m_dwNumberOfActivations;
+
+        UINT8 m_LookupTableCrst[152];
+    
+        LookupMap<PTR_MethodTable> m_TypeDefToMethodTableMap;
+        LookupMap<PTR_TypeRef> m_TypeRefToMethodTableMap;
+        LookupMap<PTR_MethodDesc> m_MethodDefToDescMap;
+        LookupMap<PTR_FieldDesc> m_FieldDefToDescMap;
+        PTR_MemberRefToDescHashTable m_pMemberRefToDescHashTable;
+        LookupMap<PTR_TypeVarTypeDesc> m_GenericParamToDescMap;
+        LookupMap<PTR_MethodTable> m_GenericTypeDefToCanonMethodTableMap;
+        LookupMap<PTR_Module> m_FileReferencesMap;
+        LookupMap<PTR_Module> m_ManifestModuleReferencesMap;
+        LookupMap<SIZE_T> m_MethodDefToPropertyInfoMap;
+        ILStubCache *m_pILStubCache;
+
+        ULONG m_DefaultDllImportSearchPathsAttributeValue;
+        LPCUTF8 m_pszCultureName;
+        ULONG m_CultureNameLength;
+        INT16 m_FallbackLocation;
+#ifdef PROFILING_SUPPORTED_DATA 
+        VolatilePtr<IMetaDataEmit> m_pValidatedEmitter;
+#endif
+
+        PTR_EEClassHashTable m_pAvailableClasses;
+        PTR_EETypeHashTable m_pAvailableParamTypes;
+        UINT8 m_InstMethodHashTableCrst[152];
+        PTR_InstMethodHashTable m_pInstMethodHashTable;
+#ifdef FEATURE_PREJIT
+        PTR_StubMethodHashTable m_pStubMethodHashTable;
+#endif // FEATURE_PREJIT
+        DWORD m_dwDebuggerJMCProbeCount;
+
+        PTR_EEClassHashTable m_pAvailableClassesCaseIns;
+        PTR_MscorlibBinder m_pBinder;
+
+        PTR_NGenLayoutInfo m_pNGenLayoutInfo;
+#ifdef FEATURE_READYTORUN
+        PTR_ReadyToRunInfo m_pReadyToRunInfo;
+#endif
+        PTR_ProfilingBlobTable m_pProfilingBlobTable;   // While performing IBC instrumenting this hashtable is populated with the External defs
+        CorProfileData * m_pProfileData;          // While ngen-ing with IBC optimizations this contains a link to the IBC data for the assembly
+        SString * m_pIBCErrorNameString;   // Used when reporting IBC type loading errors
+
+        BOOL m_nativeImageProfiling;
+        CORCOMPILE_METHOD_PROFILE_LIST *m_methodProfileList;
+
+        ModuleCtorInfo          m_ModuleCtorInfo;
+        void *m_tokenProfileData;
+#ifdef FEATURE_PREJIT
+        void* m_pNgenStats;
+#endif        
+        ArrayDPTR(BYTE) m_propertyNameSet;
+        DWORD m_nPropertyNameSet;
+    
+        PTR_DomainLocalModule   m_ModuleID;       // MultiDomain case: tagged (low bit 1) ModuleIndex
+        ModuleIndex             m_ModuleIndex;
+    
+        PTR_DWORD               m_pRegularStaticOffsets;        // Offset of statics in each class
+        PTR_DWORD               m_pThreadStaticOffsets;         // Offset of ThreadStatics in each class
+    
+        RID                     m_maxTypeRidStaticsAllocated;
+    
+        DWORD                   m_dwMaxGCRegularStaticHandles;  // Max number of handles we can have.
+        DWORD                   m_dwMaxGCThreadStaticHandles;
+    
+        DWORD                   m_dwRegularStaticsBlockSize;
+        DWORD                   m_dwThreadStaticsBlockSize;
+    
+        SIZE_T                  m_cDynamicEntries;              // Number of used entries in DynamicStaticsInfo table
+        SIZE_T                  m_maxDynamicEntries;            // Size of table itself, including unused entries
+    
+        void*                   m_pDynamicStaticsInfo;          // Table with entry for each dynamic ID
+    
+        DebuggerSpecificData  m_debuggerSpecificData;
+        PTR_PersistentInlineTrackingMapNGen m_pPersistentInlineTrackingMapNGen;
+    
+        LPCSTR               *m_AssemblyRefByNameTable;  // array that maps mdAssemblyRef tokens into their simple name
+        DWORD                 m_AssemblyRefByNameCount;  // array size
+
+#if defined(FEATURE_PREJIT)
+        PTR_Assembly           *m_NativeMetadataAssemblyRefMap; 
+#endif // defined(FEATURE_PREJIT)
+        ModuleSecurityDescriptor* m_pModuleSecurityDescriptor;
+    } dummyModule;
+
+    ZapStoredStructure * pModuleNode = image->StoreStructure(&dummyModule, sizeof(T_Module),
+                                    DataImage::ITEM_MODULE);
+
+    m_pNGenLayoutInfo = (NGenLayoutInfo *)(void *)image->GetModule()->GetLoaderAllocator()->
+        GetHighFrequencyHeap()->AllocMem(S_SIZE_T(sizeof(NGenLayoutInfo)));
+    image->StoreStructure(m_pNGenLayoutInfo, sizeof(NGenLayoutInfo), DataImage::ITEM_BINDER_ITEMS);
+
+#else
 
     ZapStoredStructure * pModuleNode = image->StoreStructure(this, sizeof(Module),
                                     DataImage::ITEM_MODULE);
@@ -8596,6 +8719,8 @@ void Module::Save(DataImage *image)
     m_pNGenLayoutInfo = (NGenLayoutInfo *)(void *)image->GetModule()->GetLoaderAllocator()->
         GetHighFrequencyHeap()->AllocMem(S_SIZE_T(sizeof(NGenLayoutInfo)));
     image->StoreStructure(m_pNGenLayoutInfo, sizeof(NGenLayoutInfo), DataImage::ITEM_BINDER_ITEMS);
+
+#endif
 
     //
     // If we are NGening, we don't need to keep a list of va
