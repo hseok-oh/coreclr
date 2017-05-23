@@ -7105,6 +7105,31 @@ fgArgTabEntryPtr Compiler::gtArgEntryByNode(GenTreeCall* call, GenTreePtr node)
         {
             return curArgTabEntry;
         }
+#if defined(_TARGET_ARM_) && !defined(LEGACY_BACKEND)
+        else if (curArgTabEntry->isSplit)
+        {
+            if (curArgTabEntry->node->OperGet() == GT_PUTARG_SPLIT)
+            {
+                GenTreePutArgSplit* splitEntry = curArgTabEntry->node->AsPutArgSplit();
+                if (splitEntry->gtOp1 == node || splitEntry->gtOp2 == node)
+                {
+                    return curArgTabEntry;
+                }
+            }
+            else if (curArgTabEntry->parent != nullptr)
+            {
+                GenTreePtr curNode = curArgTabEntry->parent->Current();
+                if (curNode->OperGet() == GT_PUTARG_SPLIT)
+                {
+                    GenTreePutArgSplit* splitEntry = curNode->AsPutArgSplit();
+                    if (splitEntry->gtOp1 == node || splitEntry->gtOp2 == node)
+                    {
+                        return curArgTabEntry;
+                    }
+                }
+            }
+        }
+#endif
         else if (curArgTabEntry->parent != nullptr)
         {
             assert(curArgTabEntry->parent->OperIsList());

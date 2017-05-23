@@ -1504,8 +1504,14 @@ bool LIR::Range::CheckLIR(Compiler* compiler, bool checkUnusedValues) const
                 // other code that relies on being able to reach all the operands from a call node.
                 // The GT_NOP case is because sometimes we eliminate stack argument stores as dead, but
                 // instead of removing them we replace with a NOP.
+#ifdef _TARGET_ARM_
+                assert(((node->OperGet() == GT_CALL) &&
+                       (def->OperIsStore() || (def->OperGet() == GT_PUTARG_STK) || (def->OperGet() == GT_NOP))) ||
+                       (node->OperGet() == GT_PUTARG_SPLIT && def->OperGet() == GT_PUTARG_STK));
+#else
                 assert((node->OperGet() == GT_CALL) &&
                        (def->OperIsStore() || (def->OperGet() == GT_PUTARG_STK) || (def->OperGet() == GT_NOP)));
+#endif
                 continue;
             }
 

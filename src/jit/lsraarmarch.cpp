@@ -560,6 +560,21 @@ void Lowering::TreeNodeInfoInitCall(GenTreeCall* call)
                 argReg = genRegArgNext(argReg);
             }
         }
+#ifdef _TARGET_ARM_
+        else if (argNode->OperGet() == GT_PUTARG_SPLIT)
+        {
+            regNumber argReg = curArgTabEntry->regNum;
+            for (GenTreeFieldList* entry = argNode->gtGetOp1()->AsFieldList(); entry != nullptr; entry = entry->Rest())
+            {
+                TreeNodeInfoInitPutArgReg(entry->Current()->AsUnOp(), argReg, *info, false, &callHasFloatRegArgs);
+
+                // Update argReg for the next putarg_reg (if any)
+                argReg = genRegArgNext(argReg);
+            }
+
+            TreeNodeInfoInitPutArgStk(argNode->gtGetOp2()->AsPutArgStk(), curArgTabEntry);
+        }
+#endif
         else
         {
             TreeNodeInfoInitPutArgReg(argNode->AsUnOp(), curArgTabEntry->regNum, *info, false, &callHasFloatRegArgs);
@@ -590,6 +605,22 @@ void Lowering::TreeNodeInfoInitCall(GenTreeCall* call)
 
                 TreeNodeInfoInitPutArgStk(arg->AsPutArgStk(), curArgTabEntry);
             }
+#ifdef _TARGET_ARM_
+            else if (arg->OperGet() == GT_PUTARG_SPLIT)
+            {
+                fgArgTabEntryPtr curArgTabEntry = compiler->gtArgEntryByNode(call, arg);
+                regNumber argReg = curArgTabEntry->regNum;
+                for (GenTreeFieldList* entry = arg->gtGetOp1()->AsFieldList(); entry != nullptr; entry = entry->Rest())
+                {
+                    TreeNodeInfoInitPutArgReg(entry->Current()->AsUnOp(), argReg, *info, false, &callHasFloatRegArgs);
+
+                    // Update argReg for the next putarg_reg (if any)
+                    argReg = genRegArgNext(argReg);
+                }
+
+                TreeNodeInfoInitPutArgStk(arg->gtGetOp2()->AsPutArgStk(), curArgTabEntry);
+            }
+#endif
             else
             {
                 TreeNodeInfo* argInfo = &(arg->gtLsraInfo);

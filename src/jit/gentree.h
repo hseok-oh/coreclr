@@ -1281,6 +1281,13 @@ public:
         return OperIsStoreBlk(OperGet());
     }
 
+#ifdef _TARGET_ARM_
+    bool OperIsPutArgSpl() const
+    {
+        return gtOper == GT_PUTARG_SPLIT;
+    }
+#endif
+
     bool OperIsPutArgStk() const
     {
         return gtOper == GT_PUTARG_STK;
@@ -1293,7 +1300,11 @@ public:
 
     bool OperIsPutArg() const
     {
+#ifdef _TARGET_ARM_
+        return OperIsPutArgStk() || OperIsPutArgReg() || OperIsPutArgSpl();
+#else
         return OperIsPutArgStk() || OperIsPutArgReg();
+#endif
     }
 
     bool OperIsAddrMode() const
@@ -4836,6 +4847,26 @@ struct GenTreePutArgStk : public GenTreeUnOp
     }
 #endif
 };
+
+#ifdef _TARGET_ARM_
+// Represent the struct argument: value is splitted in register(s) and stack
+// op1: value passed by register(s)
+// op2: value passed on stack
+struct GenTreePutArgSplit : public GenTreeOp
+{
+    GenTreePutArgSplit(GenTreePtr op1,
+                       GenTreePtr op2)
+        : GenTreeOp(GT_PUTARG_SPLIT, TYP_STRUCT, op1, op2)
+    {
+    }
+
+#if DEBUGGABLE_GENTREE
+    GenTreePutArgSplit() : GenTreeOp()
+    {
+    }
+#endif // DEBUGGABLE_GENTREE
+};
+#endif // _TARGET_ARM_
 
 // Represents GT_COPY or GT_RELOAD node
 struct GenTreeCopyOrReload : public GenTreeUnOp

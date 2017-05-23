@@ -717,6 +717,11 @@ void Lowering::TreeNodeInfoInit(GenTree* tree)
             info->internalIntCount = 1;
             break;
 
+        case GT_PUTARG_SPLIT:
+            info->srcCount = 0;
+            info->dstCount = 0;
+            break;
+
         default:
 #ifdef DEBUG
             char message[256];
