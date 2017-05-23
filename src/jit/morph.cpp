@@ -4132,8 +4132,8 @@ GenTreeCall* Compiler::fgMorphArgs(GenTreeCall* call)
                         if (intArgRegNum > MAX_REG_ARG)
                         {
                             // This indicates a partial enregistration of a struct type
-                            assert((isStructArg) || (reMorphing && argx->OperIsFieldList()) || argx->OperIsCopyBlkOp() ||
-                                   (argx->gtOper == GT_COMMA && (args->gtFlags & GTF_ASG)));
+                            assert((isStructArg) || (reMorphing && argx->OperIsFieldList()) ||
+                                   argx->OperIsCopyBlkOp() || (argx->gtOper == GT_COMMA && (args->gtFlags & GTF_ASG)));
                             unsigned numRegsPartial = size - (intArgRegNum - MAX_REG_ARG);
                             assert((unsigned char)numRegsPartial == numRegsPartial);
                             call->fgArgInfo->SplitArg(argIndex, numRegsPartial, size - numRegsPartial);
@@ -4757,7 +4757,7 @@ GenTreePtr Compiler::fgMorphMultiregStructArg(GenTreePtr arg, fgArgTabEntryPtr f
 #ifdef _TARGET_ARM_
     if (fgEntryPtr->isSplit && (fgEntryPtr->numRegs + fgEntryPtr->numSlots > 4))
     {
-        if(fgEntryPtr->isHfaRegArg)
+        if (fgEntryPtr->isHfaRegArg)
         {
             NYI_ARM("Struct split between float registers and stack");
         }

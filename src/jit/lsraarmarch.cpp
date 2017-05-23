@@ -609,7 +609,7 @@ void Lowering::TreeNodeInfoInitCall(GenTreeCall* call)
             else if (arg->OperGet() == GT_PUTARG_SPLIT)
             {
                 fgArgTabEntryPtr curArgTabEntry = compiler->gtArgEntryByNode(call, arg);
-                regNumber argReg = curArgTabEntry->regNum;
+                regNumber        argReg         = curArgTabEntry->regNum;
                 for (GenTreeFieldList* entry = arg->gtGetOp1()->AsFieldList(); entry != nullptr; entry = entry->Rest())
                 {
                     TreeNodeInfoInitPutArgReg(entry->Current()->AsUnOp(), argReg, *info, false, &callHasFloatRegArgs);

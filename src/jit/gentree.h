@@ -4854,9 +4854,7 @@ struct GenTreePutArgStk : public GenTreeUnOp
 // op2: value passed on stack
 struct GenTreePutArgSplit : public GenTreeOp
 {
-    GenTreePutArgSplit(GenTreePtr op1,
-                       GenTreePtr op2)
-        : GenTreeOp(GT_PUTARG_SPLIT, TYP_STRUCT, op1, op2)
+    GenTreePutArgSplit(GenTreePtr op1, GenTreePtr op2) : GenTreeOp(GT_PUTARG_SPLIT, TYP_STRUCT, op1, op2)
     {
     }
 

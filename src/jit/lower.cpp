@@ -796,13 +796,13 @@ GenTreePtr Lowering::NewPutArg(GenTreeCall* call, GenTreePtr arg, fgArgTabEntryP
     // Strcut can be splitted into register(s) and stack in ARM
     if (info->isSplit)
     {
-        if(arg->OperGet() == GT_FIELD_LIST)
+        if (arg->OperGet() == GT_FIELD_LIST)
         {
             GenTreeFieldList* fieldListPtr       = arg->AsFieldList();
             GenTreeFieldList* regFieldListHeader = fieldListPtr;
             GenTreeFieldList* stkFieldListHeader = nullptr;
             GenTreeFieldList* prevPtr            = nullptr;
-            GenTreePtr newOper                   = nullptr;
+            GenTreePtr        newOper            = nullptr;
 
             assert(fieldListPtr->IsFieldListHead());
 
@@ -820,15 +820,15 @@ GenTreePtr Lowering::NewPutArg(GenTreeCall* call, GenTreePtr arg, fgArgTabEntryP
                     }
 
                     // Split FieldList: Two FieldLists for registers and stack
-                    stkFieldListHeader = fieldListPtr;
+                    stkFieldListHeader  = fieldListPtr;
                     prevPtr->gtOp.gtOp2 = nullptr;
                     fieldListPtr->gtFlags |= GTF_FIELD_LIST_HEAD;
                     newOper = new (comp, GT_PUTARG_STK)
-                        GenTreePutArgStk(GT_PUTARG_STK, curTyp, fieldListPtr, info->slotNum PUT_STRUCT_ARG_STK_ONLY_ARG(info->numSlots),
+                        GenTreePutArgStk(GT_PUTARG_STK, curTyp, fieldListPtr,
+                                         info->slotNum PUT_STRUCT_ARG_STK_ONLY_ARG(info->numSlots),
                                          call->IsFastTailCall(), call);
 
-                    putArg = new (comp, GT_PUTARG_SPLIT)
-                        GenTreePutArgSplit(regFieldListHeader, newOper);
+                    putArg = new (comp, GT_PUTARG_SPLIT) GenTreePutArgSplit(regFieldListHeader, newOper);
 
                     putArg->SetInReg();
                     if (arg->gtFlags & GTF_LATE_ARG)
@@ -840,7 +840,7 @@ GenTreePtr Lowering::NewPutArg(GenTreeCall* call, GenTreePtr arg, fgArgTabEntryP
                         info->node = putArg;
                     }
                 }
-                else
+                else if (info->numRegs > ctr)
                 {
                     // Create a new GT_PUTARG_REG node with op1
                     GenTreePtr newOper = comp->gtNewOperNode(GT_PUTARG_REG, curTyp, curOp);
