@@ -4766,7 +4766,7 @@ GenTreePtr Compiler::fgMorphMultiregStructArg(GenTreePtr arg, fgArgTabEntryPtr f
             NYI_ARM("Struct split between integer registers and stack");
         }
     }
-    else if (fgEntryPtr->numSlot > 4)
+    else if (fgEntryPtr->numSlots > 4)
     {
         return arg;
     }
