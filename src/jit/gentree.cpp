@@ -11860,13 +11860,15 @@ void Compiler::gtGetArgMsg(
                 {
                     if (curArgTabEntry->numRegs == 1)
                     {
-                        sprintf_s(bufp, bufLength, "arg%d %s out+%02x%c", argNum, compRegVarName(argReg), (curArgTabEntry->slotNum) * TARGET_POINTER_SIZE, 0);
+                        sprintf_s(bufp, bufLength, "arg%d %s out+%02x%c", argNum, compRegVarName(argReg),
+                                  (curArgTabEntry->slotNum) * TARGET_POINTER_SIZE, 0);
                     }
                     else
                     {
                         regNumber otherRegNum = (regNumber)((unsigned)(argReg) + curArgTabEntry->numRegs - 1);
-                        char seperator = (curArgTabEntry->numRegs == 2) ? ',' : '-';
-                        sprintf_s(bufp, bufLength, "arg%d %s%c%s out+%02x%c", argNum, compRegVarName(argReg), seperator, compRegVarName(otherRegNum), (curArgTabEntry->slotNum) * TARGET_POINTER_SIZE, 0);
+                        char      seperator   = (curArgTabEntry->numRegs == 2) ? ',' : '-';
+                        sprintf_s(bufp, bufLength, "arg%d %s%c%s out+%02x%c", argNum, compRegVarName(argReg), seperator,
+                                  compRegVarName(otherRegNum), (curArgTabEntry->slotNum) * TARGET_POINTER_SIZE, 0);
                     }
                 }
                 else
@@ -11878,7 +11880,7 @@ void Compiler::gtGetArgMsg(
                     }
                     else
                     {
-                        unsigned curSlot = (unsigned)(curReg) - MAX_ARG_REG_COUNT;
+                        unsigned curSlot = (unsigned)(curReg)-MAX_ARG_REG_COUNT;
                         sprintf_s(bufp, bufLength, "arg%d m%d out+%s%c", argNum, listCount, curSlot, 0);
                     }
                 }
