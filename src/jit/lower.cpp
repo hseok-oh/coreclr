@@ -806,12 +806,12 @@ GenTreePtr Lowering::NewPutArg(GenTreeCall* call, GenTreePtr arg, fgArgTabEntryP
 
             assert(fieldListPtr->IsFieldListHead());
 
-            for (unsigned ctr = 0; fieldListPtr != nullptr; fieldListPtr = fieldListPtr->Rest(), ctr++)
+            for (unsigned fieldIdx = 0; fieldListPtr != nullptr; fieldListPtr = fieldListPtr->Rest(), fieldIdx++)
             {
                 GenTreePtr curOp  = fieldListPtr->gtOp.gtOp1;
                 var_types  curTyp = curOp->TypeGet();
 
-                if (info->numRegs == ctr)
+                if (info->numRegs == fieldIdx)
                 {
                     // TODO: Need to check correctness for FastTailCall
                     if (call->IsFastTailCall())
@@ -840,7 +840,7 @@ GenTreePtr Lowering::NewPutArg(GenTreeCall* call, GenTreePtr arg, fgArgTabEntryP
                         info->node = putArg;
                     }
                 }
-                else if (info->numRegs > ctr)
+                else if (info->numRegs > fieldIdx)
                 {
                     // Create a new GT_PUTARG_REG node with op1
                     GenTreePtr newOper = comp->gtNewOperNode(GT_PUTARG_REG, curTyp, curOp);

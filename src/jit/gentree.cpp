@@ -11852,6 +11852,39 @@ void Compiler::gtGetArgMsg(
         }
         else
         {
+#ifdef _TARGET_ARM_
+            if (curArgTabEntry->isSplit)
+            {
+                regNumber argReg = curArgTabEntry->regNum;
+                if (listCount == -1)
+                {
+                    if (curArgTabEntry->numRegs == 1)
+                    {
+                        sprintf_s(bufp, bufLength, "arg%d %s out+%02x%c", argNum, compRegVarName(argReg), (curArgTabEntry->slotNum) * TARGET_POINTER_SIZE, 0);
+                    }
+                    else
+                    {
+                        regNumber otherRegNum = (regNumber)((unsigned)(argReg) + curArgTabEntry->numRegs - 1);
+                        char seperator = (curArgTabEntry->numRegs == 2) ? ',' : '-';
+                        sprintf_s(bufp, bufLength, "arg%d %s%c%s out+%02x%c", argNum, compRegVarName(argReg), seperator, compRegVarName(otherRegNum), (curArgTabEntry->slotNum) * TARGET_POINTER_SIZE, 0);
+                    }
+                }
+                else
+                {
+                    regNumber curReg = (regNumber)((unsigned)(argReg) + listCount);
+                    if (((unsigned)(curReg)) <= MAX_ARG_REG_COUNT)
+                    {
+                        sprintf_s(bufp, bufLength, "arg%d m%d %s%c", argNum, listCount, compRegVarName(curReg), 0);
+                    }
+                    else
+                    {
+                        unsigned curSlot = (unsigned)(curReg) - MAX_ARG_REG_COUNT;
+                        sprintf_s(bufp, bufLength, "arg%d m%d out+%s%c", argNum, listCount, curSlot, 0);
+                    }
+                }
+                return;
+            }
+#endif
 #if FEATURE_FIXED_OUT_ARGS
             if (listCount == -1)
             {
