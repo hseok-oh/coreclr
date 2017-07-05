@@ -944,7 +944,6 @@ void CodeGen::genPutArgSplit(GenTreePutArgSplit* treeNode)
     BYTE*    gcPtrs     = treeNode->gtGcPtrs;
     unsigned gcPtrCount = treeNode->gtNumberReferenceSlots; // The count of GC pointers in the struct
     int      structSize = treeNode->getArgSize();
-    bool     isHfa      = treeNode->gtIsHfa;
 
     // This is the varNum for our load operations,
     // only used when we have a struct with a LclVar source
@@ -962,13 +961,6 @@ void CodeGen::genPutArgSplit(GenTreePutArgSplit* treeNode)
         // Generate code to load the address that we need into a register
         genConsumeAddress(addrNode);
         addrReg = addrNode->gtRegNum;
-    }
-
-    // If we have an HFA we can't have any GC pointers,
-    // if not then the max size for the the struct is 16 bytes
-    if (isHfa)
-    {
-        noway_assert(gcPtrCount == 0);
     }
 
     unsigned varNumOut    = compiler->lvaOutgoingArgSpaceVar;
