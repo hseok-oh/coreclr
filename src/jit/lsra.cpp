@@ -5763,7 +5763,14 @@ regNumber LinearScan::tryAllocateFreeReg(Interval* currentInterval, RefPosition*
     {
         if (intervalToUnassign != nullptr)
         {
-            unassignPhysReg(availablePhysRegInterval, intervalToUnassign->recentRefPosition);
+            RegRecord* physRegToUnassign = availablePhysRegInterval;
+#ifdef _TARGET_ARM_
+            // We should unassign a double register if availablePhysRegInterval is part of the double register
+            if (availablePhysRegInterval->assignedInterval->registerType == TYP_DOUBLE &&
+                !genIsValidDoubleReg(availablePhysRegInterval->regNum))
+                physRegToUnassign = findAnotherHalfRegRec(availablePhysRegInterval);
+#endif
+            unassignPhysReg(physRegToUnassign, intervalToUnassign->recentRefPosition);
             if (bestScore & VALUE_AVAILABLE)
             {
                 assert(intervalToUnassign->isConstant);
@@ -5773,7 +5780,7 @@ regNumber LinearScan::tryAllocateFreeReg(Interval* currentInterval, RefPosition*
             // the next ref, remember it.
             else if ((bestScore & UNASSIGNED) != 0 && intervalToUnassign != nullptr)
             {
-                updatePreviousInterval(availablePhysRegInterval, intervalToUnassign, intervalToUnassign->registerType);
+                updatePreviousInterval(physRegToUnassign, intervalToUnassign, intervalToUnassign->registerType);
             }
         }
         else
