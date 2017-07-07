@@ -4969,9 +4969,6 @@ struct GenTreePutArgStk : public GenTreeUnOp
     unsigned gtNumSlots;             // Number of slots for the argument to be passed on stack
     unsigned gtNumberReferenceSlots; // Number of reference slots.
     BYTE*    gtGcPtrs;               // gcPointers
-#ifdef _TARGET_ARM_
-    bool gtIsHfa;
-#endif
 
 #endif // FEATURE_PUT_STRUCT_ARG_STK
 
@@ -4995,7 +4992,6 @@ struct GenTreePutArgSplit : public GenTreePutArgStk
     GenTreePutArgSplit(GenTreePtr op1,
                        unsigned slotNum PUT_STRUCT_ARG_STK_ONLY_ARG(unsigned numSlots),
                        unsigned     numRegs,
-                       bool         isHfa,
                        bool         putIncomingArgArea = false,
                        GenTreeCall* callNode           = nullptr)
         : GenTreePutArgStk(GT_PUTARG_SPLIT,
@@ -5006,7 +5002,6 @@ struct GenTreePutArgSplit : public GenTreePutArgStk
                            callNode)
         , gtNumRegs(numRegs)
     {
-        gtIsHfa = isHfa;
         ClearOtherRegs();
         ClearOtherRegFlags();
     }
@@ -5016,7 +5011,6 @@ struct GenTreePutArgSplit : public GenTreePutArgStk
 
     // First reg of struct is always given by gtRegNum.
     // gtOtherRegs holds the other reg numbers of struct.
-    // HFA args is not yet handled.
     regNumberSmall gtOtherRegs[MAX_REG_ARG - 1];
 
     // GTF_SPILL or GTF_SPILLED flag on a multi-reg struct node indicates that one or
