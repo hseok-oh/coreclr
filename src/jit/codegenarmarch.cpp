@@ -921,12 +921,12 @@ void CodeGen::genPutArgSplit(GenTreePutArgSplit* treeNode)
         {
             GenTreePtr nextArgNode = fieldListPtr->gtGetOp1();
             regNumber  fieldReg    = nextArgNode->gtRegNum;
-            var_types  type        = treeNode->GetRegType(idx);
             genConsumeReg(nextArgNode);
 
             if (idx >= treeNode->gtNumRegs)
             {
-                emitAttr attr = emitTypeSize(type);
+                var_types type = nextArgNode->TypeGet();
+                emitAttr  attr = emitTypeSize(type);
 
                 // Emit store instructions to store the registers produced by the GT_FIELD_LIST into the outgoing
                 // argument area
@@ -937,6 +937,7 @@ void CodeGen::genPutArgSplit(GenTreePutArgSplit* treeNode)
             else
             {
                 regNumber argReg = treeNode->GetRegNumByIdx(idx);
+                var_types type   = treeNode->GetRegType(idx);
 
                 // If child node is not already in the register we need, move it
                 if (argReg != fieldReg)
