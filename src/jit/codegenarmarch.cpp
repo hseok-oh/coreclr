@@ -968,6 +968,14 @@ void CodeGen::genPutArgSplit(GenTreePutArgSplit* treeNode)
         // Generate code to load the address that we need into a register
         genConsumeAddress(addrNode);
         addrReg = addrNode->gtRegNum;
+
+        // If addrReg equal to baseReg, we use the last target register as alternative baseReg.
+        // Because baseReg is not allocated as one of target register by masking,
+        // we can avoid baseReg, addrReg, and the last target register are all same.
+        if (baseReg == addrReg)
+        {
+            baseReg = treeNode->GetRegNumByIdx(treeNode->gtNumRegs - 1);
+        }
     }
 
     unsigned varNumOut    = compiler->lvaOutgoingArgSpaceVar;
@@ -1008,7 +1016,7 @@ void CodeGen::genPutArgSplit(GenTreePutArgSplit* treeNode)
         nextIndex += 1;
     }
 
-    // Set registers
+    // We set registers to assign the last target register at the last instruction.
     structOffset = 0;
     for (unsigned idx = 0; idx < treeNode->gtNumRegs; idx++)
     {
@@ -1023,7 +1031,12 @@ void CodeGen::genPutArgSplit(GenTreePutArgSplit* treeNode)
         else
         {
             // check for case of destroying the addrRegister while we still need it
-            assert(targetReg != addrReg);
+            if (targetReg == addrReg && idx != treeNode->gtNumRegs - 1)
+            {
+                assert(targetReg != baseReg);
+                emit->emitIns_R_R(INS_mov, emitTypeSize(type), baseReg, addrReg);
+                addrReg = baseReg;
+            }
 
             // Load from our address expression source
             emit->emitIns_R_R_I(INS_ldr, emitTypeSize(type), targetReg, addrReg, structOffset);
