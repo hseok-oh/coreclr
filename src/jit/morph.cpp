@@ -7142,7 +7142,7 @@ void Compiler::fgMorphCallInlineHelper(GenTreeCall* call, InlineResult* result)
 //    caller(struct, double, struct, float, struct, struct)
 //    callee(int, int, int, int, int, double, double, double)
 //
-// Unix Amd64 && Arm64:
+// Unix Amd64 && Arm64 && Arm:
 //    A fastTailCall decision can be made whenever the callee's stack space is
 //    less than or equal to the caller's stack space. There are many permutations
 //    of when the caller and callee have different stack sizes if there are
@@ -7152,7 +7152,8 @@ void Compiler::fgMorphCallInlineHelper(GenTreeCall* call, InlineResult* result)
 //    1) If the callee has structs which cannot be enregistered it will be
 //    reported as cannot fast tail call. This is an implementation limitation
 //    where the callee only is checked for non enregisterable structs. This is
-//    tracked with https://github.com/dotnet/coreclr/issues/12644.
+//    tracked with https://github.com/dotnet/coreclr/issues/12644. On Arm, if the callee
+//    has split struct also will be reported as cannot fast tail call.
 //
 //    2) If the caller or callee has stack arguments and the callee has more
 //    arguments then the caller it will be reported as cannot fast tail call.
@@ -7160,7 +7161,7 @@ void Compiler::fgMorphCallInlineHelper(GenTreeCall* call, InlineResult* result)
 //    nCalleeArgs <= nCallerArgs, which is always true on Windows Amd64. This
 //    is tracked with https://github.com/dotnet/coreclr/issues/12468.
 //
-//    3) If the callee has a 9 to 16 byte struct argument and the callee has
+//    3) Except Arm, If the callee has a 9 to 16 byte struct argument and the callee has
 //    stack arguments, the decision will be to not fast tail call. This is
 //    because before fgMorphArgs is done, the struct is unknown whether it
 //    will be placed on the stack or enregistered. Therefore, the conservative
@@ -7172,6 +7173,15 @@ void Compiler::fgMorphCallInlineHelper(GenTreeCall* call, InlineResult* result)
 //    This is because before fgMorphArgs is done, the struct is unknown whether it
 //    will be placed on the stack or enregistered. Therefore, the conservative
 //    decision of do not fast tail call is taken.
+//    On Arm, if there are struct argument and the callee has stack arguments,
+//    the decision will be reposrted as cannot fast tail call.
+//
+//    5) Arm Only, If the callee has float or HFA arguments, the decision will be 
+//    reported as cannot fast tail call. 
+//    This is because before fgMorphArg is done, the arguments is difficult to calculate
+//    whether it will be place on the stack or enregistered. Therefore, the conservative
+//    decision of do not fast tail call is taken.
+//
 //
 // Can fast tail call examples (amd64 Unix):
 //
@@ -7211,6 +7221,20 @@ void Compiler::fgMorphCallInlineHelper(GenTreeCall* call, InlineResult* result)
 //    -- Caller requires stack space and nCalleeArgs > nCallerArgs (Bug) --
 //    caller({ double, double, double, double, double, double }) // 48 byte stack
 //    callee(int, int) -- 2 int registers
+//
+// Cannot fast tail call examples (arm):
+//
+//    -- Callee using float registers
+//    caller(int, float, long, int, double)  -- 4 int, 1 float registers, 8 byte stack space for float
+//    callee(int, double, long, long, float) -- 4 int, 2 float registers, 4 byte stack space for int, 4 byte for float
+//
+//    -- Callee has struct and stack argument
+//    caller(int, int, int, int, int, int)  -- 4 int registers, 8 byte stack space
+//    callee({int, int}, int, int, int) -- 4 int registers, 4 byte stack space
+//
+//    -- Callee has split struct
+//    caller(int, int, int, int, int, int, int, int) -- 4 int register, 16 byte stack space
+//    callee(int, int, {int, int, int, int}) -- 2 int register, split struct(2 int registers, 8 byte stack space)
 
 bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
 {
@@ -7312,6 +7336,7 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
     bool   hasMultiByteStackArgs = false;
     bool   hasTwoSlotSizedStruct = false;
     bool   hasHfaArg             = false;
+    bool   hasSplitStruct        = false;
     size_t nCalleeArgs           = calleeArgRegCount; // Keep track of how many args we have.
     size_t calleeStackSize       = 0;
     for (GenTreePtr args = callee->gtCallArgs; (args != nullptr); args = args->gtOp.gtOp2)
@@ -7325,8 +7350,9 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
 
         argAlign = roundUp(argAlign, TARGET_POINTER_SIZE) / TARGET_POINTER_SIZE;
 
-        // We don't care float register because we will not use fast tailcall
-        // for callee method using float register
+        // We don't care float register because
+        // fast tailcall when callee method using float register is not implemented yet.
+        // It is tracked with https://github.com/dotnet/coreclr/issues/13828
         if (calleeArgRegCount % argAlign != 0)
         {
             calleeArgRegCount++;
@@ -7439,35 +7465,26 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
 
                 if (isHfaArg)
                 {
-                    reportFastTailCallDecision("Callee uses float register arguments.", 0, 0);
-                    return false;
+                    // Fast tailcall when callee method using float register is not implemented yet
+                    hasHfaArg = true;
+                    break;
                 }
                 else
                 {
                     size = (unsigned)(roundUp(info.compCompHnd->getClassSize(objClass), TARGET_POINTER_SIZE)) /
                            TARGET_POINTER_SIZE;
-                    // We cannot handle split struct yet
-                    // TODO: Fix to calculate exact count
+                    // We cannot handle split struct, same as struct argument passed by stack
                     if ((calleeArgRegCount < MAX_REG_ARG) && (size + calleeArgRegCount > MAX_REG_ARG))
                     {
-                        reportFastTailCallDecision("Callee uses split struct argument.", 0, 0);
-                        return false;
+                        hasSplitStruct = true;
+                        break;
                     }
 
                     if (size > 1)
                     {
-                        // hasTwoSlotSizedStruct will determine if the struct value can be passed  multiple slot.
+                        // hasTwoSlotSizedStruct will determine if the struct value can be passed multiple slot.
                         // We set hasTwoSlotSizedStruct if size > 1 because all struct are passed by value on ARM32.
                         hasTwoSlotSizedStruct = true;
-                        if (calleeArgRegCount >= MAX_REG_ARG)
-                        {
-                            // hasMultiByteStackArgs will determine if the struct can be passed
-                            // in registers. If it cannot we will break the loop and not
-                            // fastTailCall. This is an implementation limitation
-                            // where the callee only is checked for non enregisterable structs.
-                            // It is tracked with https://github.com/dotnet/coreclr/issues/12644.
-                            hasMultiByteStackArgs = true;
-                        }
                     }
                     calleeArgRegCount += size;
                 }
@@ -7492,11 +7509,13 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
 #ifdef _TARGET_ARM_
             if (varTypeIsFloating(argx))
             {
-                return false;
+                // Fast tailcall when callee method using float register is not implemented yet
+                hasHfaArg = true;
+                break;
             }
             unsigned size = genTypeStSz(argx->gtType);
 
-            varTypeIsFloating(argx) ? calleeFloatArgRegCount += size : calleeArgRegCount += size;
+            calleeArgRegCount += size;
 #else  // !_TARGET_ARM_
             varTypeIsFloating(argx) ? ++calleeFloatArgRegCount : ++calleeArgRegCount;
 #endif // !_TARGET_ARM_
@@ -7591,6 +7610,20 @@ bool Compiler::fgCanFastTailCall(GenTreeCall* callee)
                                    callerStackSize, calleeStackSize);
         return false;
     }
+
+#ifdef _TARGET_ARM_
+    if (hasHfaArg)
+    {
+        reportFastTailCallDecision("Callee uses float/double or HFA arguments.", callerStackSize, calleeStackSize);
+        return false;
+    }
+
+    if (hasSplitStruct)
+    {
+        reportFastTailCallDecision("Callee uses split struct argument.", callerStackSize, calleeStackSize);
+        return false;
+    }
+#endif
 
     // Callee has an HFA struct and arguments that has to go on the stack. Do not fastTailCall.
     if (calleeStackSize > 0 && hasHfaArg)
